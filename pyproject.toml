@@ -1,0 +1,30 @@
+[tool]
+name = "ce-mlflow-extension"
+version = "0.1.0"
+description = "A Python library for generating HTML reports using SHAP values and metadata with Svelte and Chart.js."
+authors = ["Your Name <your.email@example.com>"]
+license = "MIT"
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+dependencies = [
+    "shap",
+    "numpy",
+    "pandas",
+    "matplotlib",
+    "flask"  # or any other web framework you might use
+]
+
+[tool.poetry]
+name = "ce-mlflow-extension"
+version = "0.1.0"
+description = "A Python library for generating HTML reports using SHAP values and metadata with Svelte and Chart.js."
+authors = ["Your Name <your.email@example.com>"]
+license = "MIT"
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"

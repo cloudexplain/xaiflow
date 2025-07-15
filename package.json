@@ -1,0 +1,22 @@
+{
+  "name": "ce-mlflow-extension-frontend",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "rollup -c -w",
+    "build:components": "rollup -c --config-components"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^24.0.0",
+    "@rollup/plugin-node-resolve": "^15.0.0",
+    "@rollup/plugin-terser": "^0.4.0",
+    "rollup": "^3.0.0",
+    "rollup-plugin-svelte": "^7.0.0",
+    "svelte": "^4.0.0"
+  },
+  "dependencies": {
+    "chart.js": "^4.0.0"
+  }
+}
