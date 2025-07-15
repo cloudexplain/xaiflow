@@ -1,7 +1,8 @@
 <script>
     import { onMount } from 'svelte';
-    import Chart from 'chart.js/auto';
-
+    
+    // Chart.js will be loaded globally via script tag
+    
     export let importanceValues = [];
     export let featureNames = [];
     export let title = "Feature Importance";
@@ -10,9 +11,16 @@
     let chart;
 
     onMount(() => {
-        if (chartContainer && importanceValues.length > 0) {
-            const ctx = chartContainer.getContext('2d');
-            chart = new Chart(ctx, {
+        console.log('ImportanceChart onMount called');
+        console.log('Global Chart object:', window.Chart);
+        console.log('chartContainer:', chartContainer);
+        console.log('importanceValues:', importanceValues);
+        
+        if (chartContainer && importanceValues.length > 0 && window.Chart) {
+            try {
+                const ctx = chartContainer.getContext('2d');
+                console.log('Creating chart with context:', ctx);
+                chart = new window.Chart(ctx, {
                 type: 'bar',
                 data: {
                     labels: featureNames,
@@ -55,7 +63,17 @@
                     }
                 }
             });
+            console.log('Chart created successfully:', chart);
+        } catch (error) {
+            console.error('Error creating chart:', error);
         }
+    } else {
+        console.log('Cannot create chart:', { 
+            hasContainer: !!chartContainer, 
+            dataLength: importanceValues.length,
+            hasChart: !!window.Chart
+        });
+    }
     });
 
     $: if (chart && importanceValues.length > 0) {

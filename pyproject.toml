@@ -2,7 +2,7 @@
 name = "ce-mlflow-extension"
 version = "0.1.0"
 description = "A Python library for generating HTML reports using SHAP values and metadata with Svelte and Chart.js."
-authors = ["Your Name <your.email@example.com>"]
+authors = ["Tobias Pitters <tobias@cloudexplain.eu>"]
 license = "MIT"
 
 [build-system]
@@ -22,7 +22,7 @@ dependencies = [
 name = "ce-mlflow-extension"
 version = "0.1.0"
 description = "A Python library for generating HTML reports using SHAP values and metadata with Svelte and Chart.js."
-authors = ["Your Name <your.email@example.com>"]
+authors = ["Tobias Pitters <tobias@cloudexplain.eu>"]
 license = "MIT"
 
 [build-system]
