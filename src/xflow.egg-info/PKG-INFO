@@ -1,0 +1,93 @@
+Metadata-Version: 2.4
+Name: xflow
+Version: 0.1.0
+Summary: MLflow integration library for generating interactive HTML reports with SHAP analysis using Svelte and Chart.js
+Author-email: CloudExplain Team <tobias@cloudexplain.eu>
+License: MIT
+Project-URL: Documentation, https://github.com/cloudexplain/ce-mlflow-extension
+Project-URL: Source, https://github.com/cloudexplain/ce-mlflow-extension
+Project-URL: Tracker, https://github.com/cloudexplain/ce-mlflow-extension/issues
+Keywords: mlflow,machine learning,explainability,shap,visualization,html,reports
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Science/Research
+Classifier: Topic :: Scientific/Engineering :: Artificial Intelligence
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Requires-Dist: mlflow>=2.0.0
+Requires-Dist: shap>=0.40.0
+Requires-Dist: numpy>=1.20.0
+Requires-Dist: pandas>=1.3.0
+Requires-Dist: scikit-learn>=1.0.0
+Requires-Dist: jinja2>=3.0.0
+Requires-Dist: matplotlib>=3.5.0
+Requires-Dist: seaborn>=0.11.0
+Provides-Extra: dev
+Requires-Dist: pytest>=6.0.0; extra == "dev"
+Requires-Dist: pytest-cov>=2.12.0; extra == "dev"
+Requires-Dist: black>=21.0.0; extra == "dev"
+Requires-Dist: flake8>=3.9.0; extra == "dev"
+
+# ce-mlflow-extension
+
+## Overview
+The `ce-mlflow-extension` is a Python library designed to generate HTML reports that visualize SHAP values and associated metadata. It leverages Svelte for the frontend and Chart.js for rendering interactive charts.
+
+## Features
+- Generates HTML reports displaying SHAP values.
+- Includes an importance chart to highlight feature significance.
+- Presents metadata in a structured format.
+
+## Project Structure
+```
+ce-mlflow-extension
+├── src
+│   └── ce_mlflow_extension
+│       ├── __init__.py
+│       ├── report_generator.py
+│       ├── shap_analyzer.py
+│       └── templates
+│           ├── report.html
+│           ├── components
+│           │   ├── ImportanceChart.svelte
+│           │   ├── ShapChart.svelte
+│           │   └── MetadataTable.svelte
+│           └── assets
+│               ├── app.js
+│               └── styles.css
+├── tests
+│   ├── __init__.py
+│   ├── test_report_generator.py
+│   └── test_shap_analyzer.py
+├── requirements.txt
+├── setup.py
+├── pyproject.toml
+└── README.md
+```
+
+## Installation
+To install the required dependencies, run:
+```
+pip install -r requirements.txt
+```
+
+## Usage
+1. Import the `ReportGenerator` and `ShapAnalyzer` classes from the library.
+2. Use `ShapAnalyzer` to process SHAP values and extract metadata.
+3. Generate a report using `ReportGenerator` and render it in your web application.
+
+## Contributing
+Contributions are welcome! Please submit a pull request or open an issue for any enhancements or bug fixes.
+
+## License
+This project is licensed under the MIT License. See the LICENSE file for details.

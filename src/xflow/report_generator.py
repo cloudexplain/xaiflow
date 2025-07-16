@@ -58,6 +58,12 @@ class ReportGenerator:
             "Age", "Income", "Credit_Score", "Debt_Ratio", 
             "Employment_Years", "Loan_Amount", "Property_Value"
         ]
+
+        shap_values = [
+            [0.2, 0.4, 0.5, 0.6, 0.1, 0.2, 1],
+            [-0.2, -0.4, -0.5, -0.6, -0.1, -0.2, -1],
+            [-0.2, -0.4, -0.5, -0.6, -0.1, -0.2, -1]
+        ]
         
         # Generate random importance values (normalized to sum to 1)
         importance_values = [random.uniform(0, 1) for _ in feature_names]
@@ -78,7 +84,9 @@ class ReportGenerator:
         html_content = template.render(
             random_number=random_number,
             timestamp=current_time,
-            importance_data=json.dumps(importance_data)  # Convert to JSON string
+            importance_data=json.dumps(importance_data),  # Convert to JSON string
+            shap_values=json.dumps(shap_values),  # Convert to JSON string
+            importance_values=json.dumps(importance_values),  # Convert to JSON string
         )
         
         # Write to file

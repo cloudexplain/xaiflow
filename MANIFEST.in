@@ -1,0 +1,43 @@
+# Include README and other documentation files
+include README.md
+include requirements.txt
+include pyproject.toml
+
+# Include all template files and assets
+recursive-include src/ce_mlflow_extension/templates *.html
+recursive-include src/ce_mlflow_extension/templates/assets *.js *.js.map *.png *.css
+recursive-include src/ce_mlflow_extension/templates/components *.svelte
+recursive-include src/ce_mlflow_extension/templates/utils *.ts
+
+# Include type definitions
+recursive-include src/ce_mlflow_extension/types *.ts
+
+# Exclude development and test files
+exclude test_*.py
+exclude demo_*.py
+exclude generate_*.py
+exclude build.sh
+exclude Makefile
+exclude mlflow_compatibility_test.html
+exclude simple_test_report.html
+exclude test_*.html
+exclude *.json
+exclude base64_output.txt
+
+# Exclude development directories
+prune dev/
+prune tests/
+prune mlflow/
+prune mlruns/
+prune node_modules/
+prune __blobstorage__/
+
+# Exclude build artifacts
+global-exclude *.pyc
+global-exclude *.pyo
+global-exclude *.pyd
+global-exclude __pycache__
+global-exclude .DS_Store
+global-exclude *.so
+global-exclude .git*
+global-exclude .pytest_cache

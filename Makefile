@@ -53,6 +53,11 @@ test-importance: build
 	.venv/bin/python test_importance.py
 	@echo "✅ ImportanceChart test report generated!"
 
+test-shap: build
+	@echo "Generating ImportanceChart test report..."
+	.venv/bin/python test_plugin_shap.py
+	@echo "✅ ImportanceChart test report generated!"
+
 # Clean generated files
 .PHONY: clean
 clean:
@@ -62,6 +67,7 @@ clean:
 	rm -f *.html
 	rm -rf node_modules/.cache
 	@echo "✅ Cleaned!"
+
 
 # Full workflow
 .PHONY: all
