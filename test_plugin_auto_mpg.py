@@ -67,7 +67,6 @@ def test_plugin():
                              'model_encoded': {0: 'Super 70', 1: 'Super 71', 2: 'Low 72', 3: 'Nice 73', 4: 'Great 74', 5: 'Lame 75', 6: 'High 76', 7: '77', 8: '78', 9: '79', 10: '80', 11: '81', 12: '82'},
                              'origin_encoded': {0: 'Afghanistan', 1: 'Bangladesh', 2: 'Maui'}}
         try:
-            import pdb; pdb.set_trace()  # Debugging breakpoint
             artifact_path = plugin.log_feature_importance_report(
                 feature_names=list(X.columns),
                 shap_values=shap_values,
