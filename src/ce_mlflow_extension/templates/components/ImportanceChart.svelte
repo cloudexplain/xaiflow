@@ -1,6 +1,4 @@
 <script>
-    import { onMount } from 'svelte';
-    
     // Chart.js will be loaded globally via script tag
     
     let {
@@ -9,80 +7,106 @@
         title = "Feature Importance"
     } = $props();
 
-    let chartContainer;
-    let chart;
+    let chartContainer = $state();
+    let chart = $state();
 
-    onMount(() => {
-        console.log('ImportanceChart onMount called');
-        console.log('Global Chart object:', window.Chart);
-        console.log('chartContainer:', chartContainer);
-        console.log('importanceValues:', importanceValues);
+    // Effect to initialize the chart when container is ready
+    $effect(() => {
+        if (!chartContainer) return;
         
-        if (chartContainer && importanceValues.length > 0 && window.Chart) {
-            try {
+        console.log('ImportanceChart: Initializing chart container');
+        
+        // Cleanup function when container changes or component unmounts
+        return () => {
+            if (chart) {
+                console.log('ImportanceChart: Cleaning up chart');
+                chart.destroy();
+                chart = null;
+            }
+        };
+    });
+
+    // Effect to create/update chart when data changes
+    $effect(() => {
+        if (!chartContainer || !window.Chart) return;
+        
+        console.log('ImportanceChart: Data effect triggered');
+        console.log('importanceValues:', importanceValues);
+        console.log('featureNames:', featureNames);
+        
+        // If no data, destroy chart and return
+        if (!importanceValues.length) {
+            if (chart) {
+                chart.destroy();
+                chart = null;
+            }
+            return;
+        }
+        
+        try {
+            // If chart exists, just update the data
+            if (chart) {
+                console.log('ImportanceChart: Updating existing chart');
+                chart.data.labels = featureNames;
+                chart.data.datasets[0].data = importanceValues;
+                chart.options.plugins.title.text = title;
+                chart.update('none'); // Use 'none' to avoid animations during updates
+            } else {
+                // Create new chart
+                console.log('ImportanceChart: Creating new chart');
                 const ctx = chartContainer.getContext('2d');
-                console.log('Creating chart with context:', ctx);
                 chart = new window.Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: featureNames,
-                    datasets: [{
-                        label: 'Importance',
-                        data: importanceValues,
-                        backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                        borderColor: 'rgba(54, 162, 235, 1)',
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            grid: {
-                                color: 'rgba(0, 0, 0, 0.1)'
-                            }
-                        },
-                        x: {
-                            grid: {
-                                display: false
-                            }
-                        }
+                    type: 'bar',
+                    data: {
+                        labels: featureNames,
+                        datasets: [{
+                            label: 'Importance',
+                            data: importanceValues,
+                            backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 1
+                        }]
                     },
-                    plugins: {
-                        legend: {
-                            display: false
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: {
+                            duration: 0 // Disable animations to prevent effect loops
                         },
-                        title: {
-                            display: true,
-                            text: title,
-                            font: {
-                                size: 16,
-                                weight: 'bold'
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                grid: {
+                                    color: 'rgba(0, 0, 0, 0.1)'
+                                }
+                            },
+                            x: {
+                                grid: {
+                                    display: false
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                display: false
+                            },
+                            title: {
+                                display: true,
+                                text: title,
+                                font: {
+                                    size: 16,
+                                    weight: 'bold'
+                                }
                             }
                         }
                     }
-                }
-            });
-            console.log('Chart created successfully:', chart);
+                });
+                console.log('ImportanceChart: Chart created successfully');
+            }
         } catch (error) {
-            console.error('Error creating chart:', error);
+            console.error('ImportanceChart: Error with chart:', error);
         }
-    } else {
-        console.log('Cannot create chart:', { 
-            hasContainer: !!chartContainer, 
-            dataLength: importanceValues.length,
-            hasChart: !!window.Chart
-        });
-    }
     });
-
-    $effect(() => { if (chart && importanceValues.length > 0) {
-        chart.data.labels = featureNames;
-        chart.data.datasets[0].data = importanceValues;
-        chart.update();
-    }});
 </script>
 
 <div class="chart-wrapper">

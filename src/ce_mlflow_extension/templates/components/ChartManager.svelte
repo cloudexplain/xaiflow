@@ -1,12 +1,15 @@
 <script lang="ts">
   import ImportanceChart2 from './ImportanceChart2.svelte';
-  import { createEventDispatcher } from 'svelte';
   
-  // Props
-  export let importanceData: { feature_name: string; importance: number }[] = [];
+  // Props using Svelte 5 runes
+  interface Props {
+    importanceData?: { feature_name: string; importance: number }[];
+  }
   
-  // Reactive state for selected label
-  let selectedLabel: string | null = null;
+  let { importanceData = [] }: Props = $props();
+  
+  // Reactive state for selected label using $state
+  let selectedLabel: string | null = $state(null);
   
   console.log('ChartManager: called');
   console.log('ChartManager: importanceData:', importanceData);

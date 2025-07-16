@@ -1,6 +1,8 @@
 <script>
-    export let randomNumber = 42;
-    export let title = "Random Number Display";
+    let {
+        randomNumber = 42,
+        title = "Random Number Display"
+    } = $props();
 </script>
 
 <div class="simple-display">

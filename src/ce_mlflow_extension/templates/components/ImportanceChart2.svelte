@@ -1,85 +1,126 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { createEventDispatcher } from 'svelte';
   import { Chart, BarController, BarElement, CategoryScale, LinearScale, Title, Tooltip, Legend } from 'chart.js';
 
   Chart.register(BarController, BarElement, CategoryScale, LinearScale, Title, Tooltip, Legend);
 
-  // Props
-  export let data: { feature_name: string; importance: number }[] = [];
-  export let selectedLabel: string | null = null;
+  // Props using Svelte 5 runes
+  interface Props {
+    data?: { feature_name: string; importance: number }[];
+    selectedLabel?: string | null;
+  }
+  
+  let { data = [], selectedLabel = $bindable(null) }: Props = $props();
+  console.log("ImportanceChart2: Loaded with data:", data, "and selectedLabel:", selectedLabel);
+  
+  // Debug the derived values
+  $effect(() => {
+    console.log("ImportanceChart2: orderedData:", orderedData);
+    console.log("ImportanceChart2: totalImportance:", totalImportance);
+    console.log("ImportanceChart2: percentageData:", percentageData);
+    console.log("ImportanceChart2: displayData:", displayData);
+  });
 
   // Event dispatcher
   const dispatch = createEventDispatcher<{
     labelSelected: string | null;
   }>();
 
-  let previousSelectedIndex: number | null = null;
-  let chart: Chart | null = null;
+  // Internal state
+  let previousSelectedIndex: number | null = $state(null);
+  let chart: Chart | null = $state(null);
+  let chartCanvas: HTMLCanvasElement | null = $state(null);
 
-  Chart.register(BarController, BarElement, CategoryScale, LinearScale, Title, Tooltip, Legend);
+  const DEFAULT_COLOR: string = '#36a2eb';
+  const CLICKED_COLOR: string = '#0000eb';
+  const MAX_DISPLAYED_ITEMS: number = 20;
 
+  // Derived values using $derived
+  const orderedData = $derived(
+    [...data].sort((a, b) => b.importance - a.importance)
+  );
 
-  interface Props {
-    data?: { feature_name: string; importance: number }[];
-    selectedLabel: string | null;
-  }
+  const totalImportance = $derived(
+    orderedData.reduce((sum, item) => sum + Math.abs(item.importance), 0)
+  );
 
-  console.log('ImportanceChart2: ImportanceChart2 onMount called');
-  console.log('ImportanceChart2: Global Chart object:', chart);
-  console.log('ImportanceChart2: importanceValues:', data);
+  const percentageData = $derived(
+    orderedData.map(item => ({
+      feature_name: item.feature_name,
+      importance: Math.round((Math.abs(item.importance) / totalImportance) * 10000) / 100
+    }))
+  );
 
-  let chartCanvas: HTMLCanvasElement;
+  const displayData = $derived(
+    percentageData.length > MAX_DISPLAYED_ITEMS 
+      ? (() => {
+          const topItems = percentageData.slice(0, MAX_DISPLAYED_ITEMS);
+          const othersSum = percentageData
+            .slice(MAX_DISPLAYED_ITEMS)
+            .reduce((sum, item) => sum + item.importance, 0);
+          
+          if (othersSum > 0) {
+            return [...topItems, { feature_name: 'Others', importance: Math.round(othersSum * 100) / 100 }];
+          }
+          return topItems;
+        })()
+      : percentageData
+  );
 
-    const DEFAULT_COLOR: string = '#36a2eb';
-    const CLICKED_COLOR: string = '#0000eb';
-    const MAX_DISPLAYED_ITEMS: number = 20;
-  
-    onMount(() => {
-      // Sort data by importance in descending order
-      let orderedData = data.sort((a, b) => b.importance - a.importance);
-      
-      // Calculate total sum for percentage calculation
-      let totalImportance = orderedData.reduce((sum, item) => sum + Math.abs(item.importance), 0);
-      
-      // Convert to percentages (relative values)
-      let percentageData = orderedData.map(item => ({
-        feature_name: item.feature_name,
-        importance: Math.round((Math.abs(item.importance) / totalImportance) * 10000) / 100 // Round to 2 decimal places
-      }));
-      
-      let displayData: { feature_name: string; importance: number }[] = [];
-      let originalIndices: (number | 'others')[];
-      
-      // Handle case where we have more items than MAX_DISPLAYED_ITEMS
-      if (percentageData.length > MAX_DISPLAYED_ITEMS) {
-        // Get top N items
-        displayData = percentageData.slice(0, MAX_DISPLAYED_ITEMS);
-        
-        // Calculate the sum of importance for the rest
-        const othersSum = percentageData
-          .slice(MAX_DISPLAYED_ITEMS)
-          .reduce((sum, item) => sum + item.importance, 0);
-        
-        // Add "Others" category
-        if (othersSum > 0) {
-          displayData.push({ feature_name: 'Others', importance: Math.round(othersSum * 100) / 100 });
-        }
-        
-        // Track original indices for selection
-        originalIndices = [...Array(MAX_DISPLAYED_ITEMS).keys(), 'others'];
-      } else {
-        displayData = percentageData;
-        originalIndices = [...Array(percentageData.length).keys()];
+  // Effect to initialize canvas cleanup
+  $effect(() => {
+    if (!chartCanvas) return;
+    
+    console.log("ImportanceChart2: Canvas ready");
+    
+    // Cleanup function
+    return () => {
+      if (chart) {
+        console.log("ImportanceChart2: Cleaning up chart");
+        chart.destroy();
+        chart = null;
       }
-      console.log("displayData", displayData);
+    };
+  });
 
-      const ctx = chartCanvas.getContext('2d') as CanvasRenderingContext2D;
+  // Effect to create/update chart when data changes
+  $effect(() => {
+    console.log("ImportanceChart2: Effect triggered");
+    console.log("ImportanceChart2: chartCanvas:", chartCanvas);
+    console.log("ImportanceChart2: displayData:", displayData);
+    console.log("ImportanceChart2: displayData.length:", displayData.length);
+    
+    if (!chartCanvas) {
+      console.log("ImportanceChart2: No canvas yet");
+      return;
+    }
+    
+    if (!displayData.length) {
+      console.log("ImportanceChart2: No data yet");
+      return;
+    }
 
-      if (!ctx) {
-        throw new Error('Failed to get 2D context');
+    console.log("ImportanceChart2: Creating/updating chart with displayData:", displayData);
+
+    const ctx = chartCanvas.getContext('2d') as CanvasRenderingContext2D;
+    if (!ctx) {
+      throw new Error('Failed to get 2D context');
+    }
+
+    try {
+      // If chart exists, update it instead of recreating
+      if (chart) {
+        console.log("ImportanceChart2: Updating existing chart");
+        chart.data.labels = displayData.map(d => d.feature_name);
+        chart.data.datasets[0].data = displayData.map(d => d.importance);
+        chart.data.datasets[0].backgroundColor = displayData.map(() => DEFAULT_COLOR);
+        chart.data.datasets[0].borderColor = displayData.map(() => DEFAULT_COLOR);
+        chart.update('none'); // Use 'none' to avoid animations
+        return;
       }
-      
+
+      // Create new chart
+      console.log("ImportanceChart2: Creating new chart");
       chart = new Chart(ctx, {
         type: 'bar',
         data: {
@@ -95,58 +136,61 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          layout: {
+          animation: {
+            duration: 0 // Disable animations to prevent effect loops
+          },
+        layout: {
+          padding: {
+            top: 10,
+            bottom: 10,
+            left: 10,
+            right: 10
+          }
+        },
+        plugins: {
+          title: {
+            display: true,
+            text: ["Feature Importance (%)"],
             padding: {
               top: 10,
-              bottom: 10,
-              left: 10,
-              right: 10
-            }
-          },
-          plugins: {
-              title: {
-                  display: true,
-                  text: ["Feature Importance (%)"],
-                  padding: {
-                      top: 10,
-                      bottom: 20
-                  },
-                  font: {
-                      size: 16
-                  }
-              },
-              legend: {
-                  display: false
-              },
-              tooltip: {
-                callbacks: {
-                  label: function(context) {
-                    return `${context.dataset.label}: ${context.parsed.x}%`;
-                  }
-                }
-              }
-          },
-          indexAxis: 'y',
-          scales: {
-            x: {
-              beginAtZero: true,
-              max: 100, // Set max to 100 since we're showing percentages
-              ticks: {
-                callback: function(value) {
-                  return value + '%';
-                }
-              }
+              bottom: 20
             },
-            y: {
-              ticks: {
-                autoSkip: false,
-                font: {
-                  size: 16
-                }
+            font: {
+              size: 16
+            }
+          },
+          legend: {
+            display: false
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                return `${context.dataset.label}: ${context.parsed.x}%`;
+              }
+            }
+          }
+        },
+        indexAxis: 'y',
+        scales: {
+          x: {
+            beginAtZero: true,
+            max: 100,
+            ticks: {
+              callback: function(value) {
+                return value + '%';
               }
             }
           },
-          onClick: (event: any, elements: any) => {
+          y: {
+            ticks: {
+              autoSkip: false,
+              font: {
+                size: 16
+              }
+            }
+          }
+        },
+        onClick: (event: any, elements: any) => {
           if (!chart || elements.length === 0) return;
           
           const elementIndex = elements[0].index;
@@ -181,10 +225,13 @@
           }
           
           chart.data.datasets[0].backgroundColor = backgroundColor;
-          chart.update();
+          chart.update('none'); // Use 'none' to avoid animation loops
         }
-      }
-    });
+      }});
+      console.log("ImportanceChart2: Chart created successfully");
+    } catch (error) {
+      console.error("ImportanceChart2: Error creating chart:", error);
+    }
   });
 </script>
 
