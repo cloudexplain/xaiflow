@@ -16190,7 +16190,7 @@ ${properties}`
 
 	ScatterShapValues[FILENAME] = 'src/ce_mlflow_extension/templates/components/ScatterShapValues.svelte';
 
-	var root$3 = add_locations(from_html(`<div class="scatter-shap-container"><canvas class="svelte-ec5xpb"></canvas></div>`), ScatterShapValues[FILENAME], [[243, 0, [[244, 2]]]]);
+	var root$3 = add_locations(from_html(`<div class="scatter-shap-container"><canvas class="svelte-ec5xpb"></canvas></div>`), ScatterShapValues[FILENAME], [[247, 0, [[248, 2]]]]);
 
 	function ScatterShapValues($$anchor, $$props) {
 		check_target(new.target);
@@ -16225,19 +16225,10 @@ ${properties}`
 
 		let dataToPlot = tag(
 			user_derived(() => $$props.shapValues.map((row, index) => {
-				if (featureEncodings() && featureEncodings()[$$props.selectedFeature]) {
-					let mapping = featureEncodings()[$$props.selectedFeature];
-
-					return {
-						x: mapping[$$props.featureValues[index][$$props.selectedFeatureIndex]],
-						y: row[$$props.selectedFeatureIndex]
-					};
-				} else {
-					return {
-						x: $$props.featureValues[index][$$props.selectedFeatureIndex],
-						y: row[$$props.selectedFeatureIndex]
-					};
-				}
+				return {
+					x: $$props.featureValues[index][$$props.selectedFeatureIndex],
+					y: row[$$props.selectedFeatureIndex]
+				};
 			})),
 			'dataToPlot'
 		);
@@ -16265,6 +16256,40 @@ ${properties}`
 
 		let labels = tag(user_derived(() => [...new Set(get(dataToPlot).map((d) => d.x))]), 'labels');
 
+		// Helper: get y-axis label mapping from featureEncodings if available
+		function getXAxisLabelMap() {
+			if (featureEncodings() && featureEncodings()[$$props.selectedFeature]) {
+				// If encoding is a mapping object (e.g., {0: "Maui", 1: "Samoa"})
+				const enc = featureEncodings()[$$props.selectedFeature];
+
+				if (enc && strict_equals(typeof enc, 'object') && !Array.isArray(enc)) {
+					return enc;
+				}
+			}
+
+			return null;
+		}
+
+		function getXConfig() {
+			const yAxisLabelMap = getXAxisLabelMap();
+
+			if (yAxisLabelMap) {
+				return {
+					type: 'linear',
+					position: 'left',
+
+					ticks: {
+						callback(value) {
+							// Map numeric y value to label if mapping exists
+							return yAxisLabelMap.hasOwnProperty(value) ? yAxisLabelMap[value] : value;
+						}
+					}
+				};
+			} else {
+				return { type: 'linear', position: 'left' };
+			}
+		}
+
 		function updateChart(dataToPlot, pointBackgroundColor, labels) {
 			console.log(...log_if_contains_state('log', "ScatterShapValues: In update chart", dataToPlot));
 
@@ -16283,7 +16308,7 @@ ${properties}`
 				get(chart).options.plugins.title.text = [`Shap Values for ${$$props.selectedFeature}`];
 
 				if (get(chart).options.scales) {
-					get(chart).options.scales.x = getXConfig(labels);
+					get(chart).options.scales.x = getXConfig();
 				}
 
 				if (get(chart).options.plugins?.tooltip?.callbacks) {
@@ -16310,20 +16335,6 @@ ${properties}`
 				updateChart(get(dataToPlot), get(pointBackgroundColor), get(labels));
 			}
 		});
-
-		function getXConfig(labels) {
-			if (strict_equals(typeof labels[0], 'boolean')) {
-				return {
-					type: 'category',
-					labels: labels.map((l) => l ? 'True' : 'False'),
-					offset: true
-				};
-			} else if (strict_equals(typeof labels[0], 'string')) {
-				return { type: 'category', labels, offset: true };
-			} else {
-				return { type: 'linear', position: 'left' };
-			}
-		}
 
 		function createChart() {
 			let df = {

@@ -44,19 +44,11 @@
 
     let dataToPlot = $derived(
         shapValues.map((row, index) => {
-            if (featureEncodings && featureEncodings[selectedFeature]) {
-                let mapping = featureEncodings[selectedFeature];
-                return {
-                    x: mapping[featureValues[index][selectedFeatureIndex]],
-                    y: row[selectedFeatureIndex]
-                };
-            } else {
                 return {
                     x: featureValues[index][selectedFeatureIndex],
                     y: row[selectedFeatureIndex]
                 };
-            }
-        })
+            })
     );
     
     console.log("ScatterShapValues: before second mapping row");
@@ -75,6 +67,39 @@
 
     console.log("ScatterShapValues: before third mapping row");
     let labels = $derived([... new Set(dataToPlot.map(d => d.x))]);
+
+    // Helper: get y-axis label mapping from featureEncodings if available
+function getXAxisLabelMap() {
+    if (featureEncodings && featureEncodings[selectedFeature]) {
+        // If encoding is a mapping object (e.g., {0: "Maui", 1: "Samoa"})
+        const enc = featureEncodings[selectedFeature];
+        if (enc && typeof enc === 'object' && !Array.isArray(enc)) {
+            return enc;
+        }
+    }
+    return null;
+}
+
+function getXConfig() {
+    const yAxisLabelMap = getXAxisLabelMap();
+    if (yAxisLabelMap) {
+        return {
+            type: 'linear',
+            position: 'left',
+            ticks: {
+                callback: function(value) {
+                    // Map numeric y value to label if mapping exists
+                    return yAxisLabelMap.hasOwnProperty(value) ? yAxisLabelMap[value] : value;
+                }
+            }
+        };
+    } else {
+        return {
+            type: 'linear',
+            position: 'left'
+        };
+    }
+}
 
     function updateChart(dataToPlot: any[], pointBackgroundColor: string[], labels: any[]) {
       console.log("ScatterShapValues: In update chart", dataToPlot);
@@ -95,7 +120,7 @@
         chart.options.plugins.title.text = [`Shap Values for ${selectedFeature}`] 
         
         if (chart.options.scales) {
-            chart.options.scales.x = getXConfig(labels) as any;
+            chart.options.scales.x = getXConfig() as any;
         } 
         
         if (chart.options.plugins?.tooltip?.callbacks) {
@@ -122,27 +147,6 @@
           updateChart(dataToPlot, pointBackgroundColor, labels);
       }
   });
-
-    function getXConfig(labels: boolean[] | string[] | number[]) {
-        if (typeof labels[0] === 'boolean') {
-            return {
-                type: 'category',
-                labels: labels.map(l => l ? 'True' : 'False'),
-                offset: true,
-            };
-        } else if (typeof labels[0] === 'string') {
-            return {
-                type: 'category',
-                labels: labels,
-                offset: true,
-            };
-        } else {
-            return {
-                type: 'linear',
-                position: 'left'
-            };
-        }
-    }
 
     function createChart() {
         let df = {
