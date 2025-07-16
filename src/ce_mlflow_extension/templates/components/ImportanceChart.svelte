@@ -3,18 +3,20 @@
     
     // Chart.js will be loaded globally via script tag
     
-    export let importanceValues = [];
-    export let featureNames = [];
-    export let title = "Feature Importance";
+    let {
+        importanceValues = [],
+        featureNames = [],
+        title = "Feature Importance"
+    } = $props();
 
     let chartContainer;
     let chart;
 
     onMount(() => {
-        console.log('ImportanceChart: ImportanceChart onMount called');
-        console.log('ImportanceChart: Global Chart object:', window.Chart);
-        console.log('ImportanceChart: chartContainer:', chartContainer);
-        console.log('ImportanceChart: importanceValues:', importanceValues);
+        console.log('ImportanceChart onMount called');
+        console.log('Global Chart object:', window.Chart);
+        console.log('chartContainer:', chartContainer);
+        console.log('importanceValues:', importanceValues);
         
         if (chartContainer && importanceValues.length > 0 && window.Chart) {
             try {
@@ -76,11 +78,11 @@
     }
     });
 
-    $: if (chart && importanceValues.length > 0) {
+    $effect(() => { if (chart && importanceValues.length > 0) {
         chart.data.labels = featureNames;
         chart.data.datasets[0].data = importanceValues;
         chart.update();
-    }
+    }});
 </script>
 
 <div class="chart-wrapper">
