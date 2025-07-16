@@ -114,9 +114,13 @@
             // Data passed from Python
             const importanceData = {{ importance_data | safe }};
             const shapValues = {{ shap_values | safe }};
+            const featureValues = {{ feature_values | safe }};
+            const baseValues = {{ base_values | safe }};
             
-            console.log('Importance data:', importanceData);
-            console.log('shapValues data:', shapValues);
+            console.log('Overview: Importance data:', importanceData);
+            console.log('Overview: shapValues data:', shapValues);
+            console.log('Overview: featureValues data:', featureValues);
+            console.log('Overview: baseValues data:', baseValues);
             
             // Initialize ImportanceChart
             if (window.ImportanceChart && importanceData) {
@@ -169,6 +173,8 @@
                         props: {
                             importanceData: chartData,
                             shapValues: shapValues,
+                            featureValues: featureValues,
+                            baseValues: baseValues,
                         }
                     });
                     console.log('ChartManager with ImportanceChart2 mounted successfully!');

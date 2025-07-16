@@ -35,13 +35,13 @@
   const CLICKED_COLOR: string = '#0000eb';
   const MAX_DISPLAYED_ITEMS: number = 20;
 
-  // Derived values using $derived
+  // Derived values using $derived with safety checks
   const orderedData = $derived(
-    [...data].sort((a, b) => b.importance - a.importance)
+    Array.isArray(data) ? [...data].sort((a, b) => b.importance - a.importance) : []
   );
 
   const totalImportance = $derived(
-    orderedData.reduce((sum, item) => sum + Math.abs(item.importance), 0)
+    orderedData.length > 0 ? orderedData.reduce((sum, item) => sum + Math.abs(item.importance), 0) : 1
   );
 
   const percentageData = $derived(
@@ -233,6 +233,7 @@
       console.error("ImportanceChart2: Error creating chart:", error);
     }
   });
+    console.log("ImportanceChart2: Component mounted and chart created");
 </script>
 
 <div class="importance-chart-container">

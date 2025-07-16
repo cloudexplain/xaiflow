@@ -40,6 +40,7 @@
         });
     });
 
+    console.log("ScatterShapValues: before first mapping row");
     let dataToPlot = $derived(
         shapValues.map((row, index) => {
             console.log('Mapping row:', row, 'for feature:', selectedFeature);
@@ -50,6 +51,7 @@
         })
     );
     
+    console.log("ScatterShapValues: before second mapping row");
     // Color mapping based on isHigherOutputBetter prop
     let pointBackgroundColor = $derived(dataToPlot.map(d => {
         // const normalizedValue = (d.y - minOfData) / (maxOfData - minOfData) * 100;
@@ -63,6 +65,7 @@
         // return colorMap(colorValue);
     }));
 
+    console.log("ScatterShapValues: before third mapping row");
     let labels = $derived([... new Set(dataToPlot.map(d => d.x))]);
 
     function updateChart(dataToPlot: any[], pointBackgroundColor: string[], labels: any[]) {
@@ -100,6 +103,7 @@
       }
     }
   
+    console.log("ScatterShapValues: before update chart");
     run(() => {
     updateChart(dataToPlot, pointBackgroundColor, labels);
   });
@@ -225,6 +229,7 @@
             chart.destroy();
         }
     });
+    console.log("ScatterShapValues: Component mounted and chart created");
 </script>
 
 <div class="scatter-shap-container">

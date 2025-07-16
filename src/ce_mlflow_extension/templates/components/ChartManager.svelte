@@ -13,6 +13,7 @@
   // Reactive state for selected label using $state
   let selectedLabel: string | null = $state(null);
 
+  console.log("ChartManager", importanceData);
   let featureNames = $derived(
     importanceData.map(item => item.feature_name)
   );

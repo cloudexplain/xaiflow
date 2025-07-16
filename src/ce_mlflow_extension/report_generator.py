@@ -86,6 +86,7 @@ class ReportGenerator:
             timestamp=current_time,
             importance_data=json.dumps(importance_data),  # Convert to JSON string
             shap_values=json.dumps(shap_values),  # Convert to JSON string
+            importance_values=json.dumps(importance_values),  # Convert to JSON string
         )
         
         # Write to file

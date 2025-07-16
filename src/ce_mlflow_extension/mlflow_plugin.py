@@ -12,6 +12,7 @@ from mlflow.tracking import MlflowClient
 from typing import Dict, List, Optional, Any
 import numpy as np
 from .report_generator import ReportGenerator
+from shap import Explanation
 
 
 class CEMLflowPlugin:
@@ -26,8 +27,8 @@ class CEMLflowPlugin:
     def log_feature_importance_report(
         self,
         feature_names: List[str],
-        importance_values: List[float],
-        shap_values: Optional[List[List[float]]] = None,
+        shap_values: List[List[float]] | np.ndarray | Explanation,
+        importance_values: List[float] | np.ndarray = None,
         run_id: Optional[str] = None,
         artifact_path: str = "reports",
         report_name: str = "feature_importance_report.html"
@@ -47,6 +48,11 @@ class CEMLflowPlugin:
             str: Path to the logged artifact
         """
         
+        if not isinstance(shap_values, Explanation):
+            raise ValueError("shap_values must be an instance of shap.Explanation. Pls call explainer(X) or similar to get a valid Explanation object.")
+        feature_values = shap_values.data
+        base_values = shap_values.base_values
+        shap_values = shap_values.values
         # Use active run if no run_id provided
         if run_id is None:
             active_run = mlflow.active_run()
@@ -55,6 +61,8 @@ class CEMLflowPlugin:
             run_id = active_run.info.run_id
         
         # Normalize importance values to sum to 1
+        if importance_values is None:
+            importance_values = np.abs(shap_values).mean(axis=0).tolist()
         total_importance = sum(importance_values)
         if total_importance > 0:
             normalized_importance = [v / total_importance for v in importance_values]
@@ -88,7 +96,9 @@ class CEMLflowPlugin:
             self._generate_html_content(
                 output_path=temp_path,
                 importance_data=importance_data,
-                shap_values=shap_values
+                shap_values=shap_values,
+                feature_values=feature_values,
+                base_values=base_values,
             )
             
             # Log the report as an MLflow artifact
@@ -96,13 +106,13 @@ class CEMLflowPlugin:
             mlflow.log_artifact(temp_path, artifact_path)
             
             # Log metadata about the report
-            mlflow.log_param("report_type", "feature_importance")
-            mlflow.log_param("num_features", len(feature_names))
+            # mlflow.log_param("report_type", "feature_importance")
+            # mlflow.log_param("num_features", len(feature_names))
             mlflow.log_param("report_artifact_path", artifact_full_path)
             
             # Log feature importance as metrics
-            for feature, importance in zip(feature_names, normalized_importance):
-                mlflow.log_metric(f"importance_{feature}", importance)
+            # for feature, importance in zip(feature_names, normalized_importance):
+            #     mlflow.log_metric(f"importance_{feature}", importance)
             
             print(f"Feature importance report logged to MLflow: {artifact_full_path}")
             return artifact_full_path
@@ -214,7 +224,9 @@ class CEMLflowPlugin:
         self,
         output_path: str,
         importance_data: Dict[str, Any],
-        shap_values: List[List[float]]
+        shap_values: List[List[float]],
+        feature_values: List[float] = None,
+        base_values: List[float] = None,
     ):
         """
         Generate a custom HTML report with the provided data, inlining the bundle.js
@@ -252,12 +264,18 @@ class CEMLflowPlugin:
             random_number=random_number,
             timestamp=current_time,
             importance_data=json.dumps(importance_data),
-            shap_values=json.dumps(shap_values),
+            shap_values=json.dumps(shap_values, default=str),
+            feature_values=json.dumps(feature_values, default=str) if feature_values is not None else None,
+            base_values=json.dumps(base_values, default=str) if base_values is not None else None,
             bundle_js_content=bundle_js_content  # Pass the bundle content
         )
         
         # Write to file
         with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+
+        with open('test_report.html', 'w', encoding='utf-8') as f:
+            print('logged to test_report.html')
             f.write(html_content)
     
     def get_report_url(self, run_id: str, artifact_path: str = "reports", report_name: str = "feature_importance_report.html") -> str:
