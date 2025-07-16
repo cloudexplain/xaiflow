@@ -5,12 +5,17 @@
   // Props using Svelte 5 runes
   interface Props {
     importanceData?: { feature_name: string; importance: number }[];
+    shapValues?: number[][];
   }
   
-  let { importanceData = [] }: Props = $props();
+  let { importanceData = [], shapValues = [] }: Props = $props();
   
   // Reactive state for selected label using $state
   let selectedLabel: string | null = $state(null);
+
+  let featureNames = $derived(
+    importanceData.map(item => item.feature_name)
+  );
   
   console.log('ChartManager: called');
   console.log('ChartManager: importanceData:', importanceData);
@@ -21,17 +26,37 @@
     selectedLabel = event.detail;
     console.log('ChartManager: selectedLabel updated to:', selectedLabel);
   }
+
+  let selectedFeatureIndex = $derived(featureNames.indexOf(selectedLabel || null));
+  $effect(() => {
+    console.log('ChartManager: selectedFeatureIndex updated to:', selectedFeatureIndex);
+  });
 </script>
 
 <div class="chart-manager">
-  <div class="chart-section">
-    <h3>Feature Importance Chart</h3>
-    <div class="chart-container">
-      <ImportanceChart2 
-        data={importanceData} 
-        bind:selectedLabel={selectedLabel}
-        on:labelSelected={handleLabelSelection}
-      />
+  <div class="charts-row">
+    <div class="chart-section">
+      <h3>Feature Importance Chart</h3>
+      <div class="chart-container">
+        <ImportanceChart2 
+          data={importanceData} 
+          bind:selectedLabel={selectedLabel}
+          on:labelSelected={handleLabelSelection}
+        />
+      </div>
+    </div>
+    
+    <div class="chart-section">
+      <h3>SHAP Values</h3>
+      <div class="chart-container">
+        <ScatterShapValues 
+          shapValues={shapValues} 
+          bind:selectedFeatureIndex={selectedFeatureIndex} 
+          selectedFeature="Feature Name" 
+          bind:selectedLabel={selectedLabel}
+          isHigherOutputBetter={true} 
+        />
+      </div>
     </div>
   </div>
   
@@ -60,18 +85,33 @@
     width: 100%;
   }
   
-  .chart-section {
+  .charts-row {
+    display: flex;
+    gap: 20px;
     margin-bottom: 30px;
+    width: 100%;
+  }
+  
+  .chart-section {
+    flex: 1;
+    min-width: 0; /* Allows flex items to shrink below their natural width */
+    width: 50%;
   }
   
   .chart-section h3 {
     margin-bottom: 15px;
     color: #333;
+    text-align: center;
   }
   
   .chart-container {
     height: 500px;
     width: 100%;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 10px;
+    background-color: #fafafa;
+    box-sizing: border-box;
   }
   
   .selected-info {
@@ -85,5 +125,16 @@
   .selected-info p {
     margin: 0;
     font-size: 16px;
+  }
+  
+  /* Responsive design for smaller screens */
+  @media (max-width: 768px) {
+    .charts-row {
+      flex-direction: column;
+    }
+    
+    .chart-container {
+      height: 400px;
+    }
   }
 </style>

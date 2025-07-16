@@ -47,6 +47,8 @@
         #importance-chart2-container {
             height: 600px;
             margin-top: 20px;
+            width: 100%;
+            overflow: visible;
         }
         #simple-display-container {
             margin-top: 20px;
@@ -93,8 +95,10 @@
     <!-- Load Chart.js from CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
-    <!-- Load the compiled Svelte bundle -->
-    <script src="src/ce_mlflow_extension/templates/assets/bundle.js"></script>
+    <!-- Inline the compiled Svelte bundle (for MLflow compatibility) -->
+    <script>
+        {{ bundle_js_content | safe }}
+    </script>
     
     <!-- Initialize the Svelte components -->
     <script>
@@ -112,6 +116,7 @@
             const shapValues = {{ shap_values | safe }};
             
             console.log('Importance data:', importanceData);
+            console.log('shapValues data:', shapValues);
             
             // Initialize ImportanceChart
             if (window.ImportanceChart && importanceData) {
@@ -162,7 +167,8 @@
                     new window.ChartManager({
                         target: document.getElementById('importance-chart2-container'),
                         props: {
-                            importanceData: chartData
+                            importanceData: chartData,
+                            shapValues: shapValues,
                         }
                     });
                     console.log('ChartManager with ImportanceChart2 mounted successfully!');
@@ -175,23 +181,23 @@
                 console.log('importanceData exists:', !!importanceData);
             }
 
-            if (window.ScatterShapValues && shapValues) {
-                console.log('Initializing ScatterShapValues with data:', shapValues);
-                new window.ScatterShapValues({
-                    target: document.getElementById('scatter-shap-values-container'),
-                    props: {
-                        shapValues: shapValues,
-                        selectedFeature: 'feature1', // Example feature
-                        selectedFeatureIndex: 0, // Example index
-                        isHigherOutputBetter: true
-                    }
-                });
-                console.log('ScatterShapValues component mounted successfully!');
-            } else {
-                console.error('ScatterShapValues component not found or no data provided');
-                console.log('window.ScatterShapValues exists:', !!window.ScatterShapValues);
-                console.log('shapValues exists:', !!shapValues);
-            }
+            // if (window.ScatterShapValues && shapValues) {
+            //     console.log('Initializing ScatterShapValues with data:', shapValues);
+            //     new window.ScatterShapValues({
+            //         target: document.getElementById('scatter-shap-values-container'),
+            //         props: {
+            //             shapValues: shapValues,
+            //             selectedFeature: 'feature1', // Example feature
+            //             selectedFeatureIndex: 0, // Example index
+            //             isHigherOutputBetter: true
+            //         }
+            //     });
+            //     console.log('ScatterShapValues component mounted successfully!');
+            // } else {
+            //     console.error('ScatterShapValues component not found or no data provided');
+            //     console.log('window.ScatterShapValues exists:', !!window.ScatterShapValues);
+            //     console.log('shapValues exists:', !!shapValues);
+            // }
         });
     </script>
 </body>

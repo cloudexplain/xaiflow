@@ -10,6 +10,10 @@
     let chartContainer = $state();
     let chart = $state();
 
+    let maxImportance = $derived(
+        Math.max(...importanceValues.map(value => Math.abs(value)))
+    );
+
     // Effect to initialize the chart when container is ready
     $effect(() => {
         if (!chartContainer) return;
@@ -50,7 +54,12 @@
                 chart.data.labels = featureNames;
                 chart.data.datasets[0].data = importanceValues;
                 chart.options.plugins.title.text = title;
-                chart.update('none'); // Use 'none' to avoid animations during updates
+                
+                // Update the y-axis max value properly
+                chart.options.scales.y.max = maxImportance * 1.1;
+                console.log('ImportanceChart: Setting y-axis max to:', maxImportance * 1.1);
+                
+                chart.update(); // Use default update to apply all changes
             } else {
                 // Create new chart
                 console.log('ImportanceChart: Creating new chart');
@@ -81,6 +90,7 @@
                                 }
                             },
                             x: {
+                                max: maxImportance * 1.1, // Limit to 1.1 times the max importance
                                 grid: {
                                     display: false
                                 }

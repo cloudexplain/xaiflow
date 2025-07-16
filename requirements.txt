@@ -6,3 +6,5 @@ svelte
 chart.js
 pyyaml
 jinja2
+mlflow
+scikit-learn
