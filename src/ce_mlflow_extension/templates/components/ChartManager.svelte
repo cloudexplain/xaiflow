@@ -1,5 +1,6 @@
 <script lang="ts">
   import ImportanceChart2 from './ImportanceChart2.svelte';
+  import ScatterShapValues from './ScatterShapValues.svelte';
   
   // Props using Svelte 5 runes
   interface Props {
