@@ -37,23 +37,6 @@
 </script>
 
 <div class="chart-manager">
-  <!-- Debug information -->
-  <div style="background: #f0f0f0; padding: 10px; margin-bottom: 20px; border-radius: 4px;">
-    <h4 style="margin: 0 0 10px 0; color: #666;">Debug Info:</h4>
-    <p style="margin: 5px 0; font-size: 12px;">
-      ImportanceData length: {importanceData?.length || 0}
-    </p>
-    <p style="margin: 5px 0; font-size: 12px;">
-      ShapValues length: {shapValues?.length || 0}
-    </p>
-    <p style="margin: 5px 0; font-size: 12px;">
-      FeatureValues length: {featureValues?.length || 0}
-    </p>
-    <p style="margin: 5px 0; font-size: 12px;">
-      Selected Label: {selectedLabel || 'None'}
-    </p>
-  </div>
-
   <div class="charts-row">
     <div class="chart-section">
       <h3>Feature Importance Chart</h3>
