@@ -16,9 +16,11 @@
   let selectedLabel: string | null = $state(null);
 
   console.log("ChartManager", importanceData);
+  console.log('ChartManager: 1/4 command in file');
   let featureNames = $derived(
     importanceData.map(item => item.feature_name)
   );
+  console.log('ChartManager: 2/4 command in file');
   
   console.log('ChartManager: called');
   console.log('ChartManager: importanceData:', importanceData);
@@ -29,11 +31,13 @@
   function handleLabelSelection(event: CustomEvent<string | null>) {
     selectedLabel = event.detail;
     console.log('ChartManager: selectedLabel updated to:', selectedLabel);
+    console.log('ChartManager: 3/4 command in file');
   }
 
   let selectedFeatureIndex = $derived(featureNames.indexOf(selectedLabel || null));
   $effect(() => {
     console.log('ChartManager: selectedFeatureIndex updated to:', selectedFeatureIndex);
+    console.log('ChartManager: 4/4 command in file');
   });
 </script>
 

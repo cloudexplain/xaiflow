@@ -165,6 +165,7 @@
             const featureValues = {{ feature_values | safe }};
             const baseValues = {{ base_values | safe }};
             const featureEncodings = {{ feature_encodings | safe }};
+            const featureNames = {{ feature_names | safe }};
             
             // Initialize ImportanceChart2 with ChartManager for reactive state
             if (window.ChartManager && importanceData) {
@@ -200,11 +201,11 @@
                     new window.DeepDiveManager({
                         target: document.getElementById('deepdivemanager-container'),
                         props: {
-                            featureNames: importanceData.features,
+                            featureNames: featureNames,
                             shapValues: shapValues,
                             featureValues: featureValues,
                             baseValues: baseValues,
-                            featureEncodings: featureEncodings
+                            featureEncodings: featureEncodings,
                         }
                     });
                     console.log('DeepDiveManager mounted successfully!');

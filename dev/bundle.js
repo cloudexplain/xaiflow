@@ -348,8 +348,6 @@
 	const PROPS_IS_UPDATED = 1 << 2;
 	const PROPS_IS_BINDABLE = 1 << 3;
 	const PROPS_IS_LAZY_INITIAL = 1 << 4;
-
-	const TEMPLATE_FRAGMENT = 1;
 	const TEMPLATE_USE_IMPORT_NODE = 1 << 1;
 
 	const UNINITIALIZED = Symbol();
@@ -2604,24 +2602,6 @@ ${properties}`
 
 	/**
 	 * Don't mark this as side-effect-free, hydration needs to walk all nodes
-	 * @param {DocumentFragment | TemplateNode[]} fragment
-	 * @param {boolean} is_text
-	 * @returns {Node | null}
-	 */
-	function first_child(fragment, is_text) {
-		{
-			// when not hydrating, `fragment` is a `DocumentFragment` (the result of calling `open_frag`)
-			var first = /** @type {DocumentFragment} */ (get_first_child(/** @type {Node} */ (fragment)));
-
-			// TODO prevent user comments with the empty string when preserveComments is true
-			if (first instanceof Comment && first.data === '') return get_next_sibling(first);
-
-			return first;
-		}
-	}
-
-	/**
-	 * Don't mark this as side-effect-free, hydration needs to walk all nodes
 	 * @param {TemplateNode} node
 	 * @param {number} count
 	 * @param {boolean} is_text
@@ -4185,7 +4165,6 @@ ${properties}`
 	 */
 	/*#__NO_SIDE_EFFECTS__*/
 	function from_html(content, flags) {
-		var is_fragment = (flags & TEMPLATE_FRAGMENT) !== 0;
 		var use_import_node = (flags & TEMPLATE_USE_IMPORT_NODE) !== 0;
 
 		/** @type {Node} */
@@ -4201,19 +4180,14 @@ ${properties}`
 
 			if (node === undefined) {
 				node = create_fragment_from_html(has_start ? content : '<!>' + content);
-				if (!is_fragment) node = /** @type {Node} */ (get_first_child(node));
+				node = /** @type {Node} */ (get_first_child(node));
 			}
 
 			var clone = /** @type {TemplateNode} */ (
 				use_import_node || is_firefox ? document.importNode(node, true) : node.cloneNode(true)
 			);
 
-			if (is_fragment) {
-				var start = /** @type {TemplateNode} */ (get_first_child(clone));
-				var end = /** @type {TemplateNode} */ (clone.lastChild);
-
-				assign_nodes(start, end);
-			} else {
+			{
 				assign_nodes(clone, clone);
 			}
 
@@ -17500,7 +17474,7 @@ ${properties}`
 
 	ImportanceChart2[FILENAME] = 'src/ce_mlflow_extension/templates/components/ImportanceChart2.svelte';
 
-	var root$4 = add_locations(from_html(`<div class="importance-chart-container"><canvas class="svelte-ec5xpb"></canvas></div>`), ImportanceChart2[FILENAME], [[234, 0, [[235, 2]]]]);
+	var root$4 = add_locations(from_html(`<div class="importance-chart-container"><canvas class="svelte-ec5xpb"></canvas></div>`), ImportanceChart2[FILENAME], [[236, 0, [[237, 2]]]]);
 
 	function ImportanceChart2($$anchor, $$props) {
 		check_target(new.target);
@@ -17524,12 +17498,16 @@ ${properties}`
 		const MAX_DISPLAYED_ITEMS = 20;
 
 		// Derived values using $derived with safety checks
+		console.log('ImportanceChart2: 1/6 command in file');
+
 		const orderedData = tag(
 			user_derived(() => Array.isArray(data())
 				? [...data()].sort((a, b) => b.importance - a.importance)
 				: []),
 			'orderedData'
 		);
+
+		console.log('ImportanceChart2: 2/6 command in file');
 
 		const totalImportance = tag(
 			user_derived(() => get(orderedData).length > 0
@@ -17538,6 +17516,8 @@ ${properties}`
 			'totalImportance'
 		);
 
+		console.log('ImportanceChart2: 3/6 command in file');
+
 		const percentageData = tag(
 			user_derived(() => get(orderedData).map((item) => ({
 				feature_name: item.feature_name,
@@ -17545,6 +17525,8 @@ ${properties}`
 			}))),
 			'percentageData'
 		);
+
+		console.log('ImportanceChart2: 4/6 command in file');
 
 		const displayData = tag(
 			user_derived(() => get(percentageData).length > MAX_DISPLAYED_ITEMS
@@ -17569,7 +17551,11 @@ ${properties}`
 			'displayData'
 		);
 
+		console.log(...log_if_contains_state('log', 'ImportanceChart2: 5/6 command in file', get(displayData)));
+
 		let maxY = tag(user_derived(() => Math.max(...get(displayData).map((item) => item.importance)) * 1.1), 'maxY');
+
+		console.log(...log_if_contains_state('log', 'ImportanceChart2: after 5/6 command in file', get(maxY)));
 
 		// Effect to initialize canvas cleanup
 		user_effect(() => {
@@ -17756,7 +17742,7 @@ ${properties}`
 
 	ScatterShapValues[FILENAME] = 'src/ce_mlflow_extension/templates/components/ScatterShapValues.svelte';
 
-	var root$3 = add_locations(from_html(`<div class="scatter-shap-container"><canvas class="svelte-ec5xpb"></canvas></div>`), ScatterShapValues[FILENAME], [[247, 0, [[248, 2]]]]);
+	var root$3 = add_locations(from_html(`<div class="scatter-shap-container"><canvas class="svelte-ec5xpb"></canvas></div>`), ScatterShapValues[FILENAME], [[237, 0, [[238, 2]]]]);
 
 	function ScatterShapValues($$anchor, $$props) {
 		check_target(new.target);
@@ -17779,15 +17765,7 @@ ${properties}`
 			isHigherOutputBetter: isHigherOutputBetter()
 		}));
 
-		user_effect(() => {
-			console.log(...log_if_contains_state('log', 'ScatterShapValues: Props changed:', {
-				shapValues: $$props.shapValues,
-				selectedFeatureIndex: $$props.selectedFeatureIndex,
-				selectedFeature: $$props.selectedFeature,
-				isHigherOutputBetter: isHigherOutputBetter(),
-				featureEncodings: featureEncodings()
-			}));
-		});
+		console.log('ScatterShapValues: 1/5 command in file');
 
 		let dataToPlot = tag(
 			user_derived(() => $$props.shapValues.map((row, index) => {
@@ -17799,7 +17777,7 @@ ${properties}`
 			'dataToPlot'
 		);
 
-		console.log("ScatterShapValues: before second mapping row");
+		console.log('ScatterShapValues: 2/5 command in file');
 
 		// Color mapping based on isHigherOutputBetter prop
 		let pointBackgroundColor = tag(
@@ -17818,9 +17796,11 @@ ${properties}`
 			'pointBackgroundColor'
 		);
 
-		console.log("ScatterShapValues: before third mapping row");
+		console.log('ScatterShapValues: 3/5 command in file');
 
 		let labels = tag(user_derived(() => [...new Set(get(dataToPlot).map((d) => d.x))]), 'labels');
+
+		console.log('ScatterShapValues: 4/5 command in file');
 
 		// Helper: get y-axis label mapping from featureEncodings if available
 		function getXAxisLabelMap() {
@@ -18010,18 +17990,18 @@ ${properties}`
 
 	ChartManager[FILENAME] = 'src/ce_mlflow_extension/templates/components/ChartManager.svelte';
 
-	var root_1$1 = add_locations(from_html(`<div class="selected-info svelte-169j5gc"><p class="svelte-169j5gc"><strong>Selected Feature:</strong> </p></div>`), ChartManager[FILENAME], [[70, 4, [[71, 6, [[71, 9]]]]]]);
+	var root_1$1 = add_locations(from_html(`<div class="selected-info svelte-169j5gc"><p class="svelte-169j5gc"><strong>Selected Feature:</strong> </p></div>`), ChartManager[FILENAME], [[74, 4, [[75, 6, [[75, 9]]]]]]);
 
 	var root$2 = add_locations(from_html(`<div class="chart-manager svelte-169j5gc"><div class="charts-row svelte-169j5gc"><div class="chart-section svelte-169j5gc"><h3 class="svelte-169j5gc">Feature Importance Chart</h3> <div class="chart-container svelte-169j5gc"><!></div></div> <div class="chart-section svelte-169j5gc"><h3 class="svelte-169j5gc">SHAP Values</h3> <div class="chart-container svelte-169j5gc"><!></div></div></div> <!></div>`), ChartManager[FILENAME], [
 		[
-			40,
+			44,
 			0,
 
 			[
 				[
-					41,
+					45,
 					2,
-					[[42, 4, [[43, 6], [44, 6]]], [53, 4, [[54, 6], [55, 6]]]]
+					[[46, 4, [[47, 6], [48, 6]]], [57, 4, [[58, 6], [59, 6]]]]
 				]
 			]
 		]
@@ -18039,9 +18019,11 @@ ${properties}`
 		let selectedLabel = tag(state(null), 'selectedLabel');
 
 		console.log(...log_if_contains_state('log', "ChartManager", $$props.importanceData));
+		console.log('ChartManager: 1/4 command in file');
 
 		let featureNames = tag(user_derived(() => $$props.importanceData.map((item) => item.feature_name)), 'featureNames');
 
+		console.log('ChartManager: 2/4 command in file');
 		console.log('ChartManager: called');
 		console.log(...log_if_contains_state('log', 'ChartManager: importanceData:', $$props.importanceData));
 		console.log(...log_if_contains_state('log', 'ChartManager: selectedLabel:', get(selectedLabel)));
@@ -18051,12 +18033,14 @@ ${properties}`
 		function handleLabelSelection(event) {
 			set$1(selectedLabel, event.detail, true);
 			console.log(...log_if_contains_state('log', 'ChartManager: selectedLabel updated to:', get(selectedLabel)));
+			console.log('ChartManager: 3/4 command in file');
 		}
 
 		let selectedFeatureIndex = tag(user_derived(() => get(featureNames).indexOf(get(selectedLabel) || null)), 'selectedFeatureIndex');
 
 		user_effect(() => {
 			console.log(...log_if_contains_state('log', 'ChartManager: selectedFeatureIndex updated to:', get(selectedFeatureIndex)));
+			console.log('ChartManager: 4/4 command in file');
 		});
 
 		var div = root$2();
@@ -18083,7 +18067,7 @@ ${properties}`
 			}),
 			'component',
 			ChartManager,
-			45,
+			49,
 			8,
 			{ componentTag: 'ImportanceChart2' }
 		);
@@ -18130,7 +18114,7 @@ ${properties}`
 			}),
 			'component',
 			ChartManager,
-			56,
+			60,
 			8,
 			{ componentTag: 'ScatterShapValues' }
 		);
@@ -18152,7 +18136,7 @@ ${properties}`
 				}),
 				'if',
 				ChartManager,
-				69,
+				73,
 				2
 			);
 		}
@@ -22553,7 +22537,7 @@ ${properties}`
 
 	DeepDiveChart[FILENAME] = 'src/ce_mlflow_extension/templates/components/DeepDiveChart.svelte';
 
-	var root$1 = add_locations(from_html(`<canvas class="svelte-1mf6xd3"></canvas>`), DeepDiveChart[FILENAME], [[403, 2]]);
+	var root$1 = add_locations(from_html(`<canvas class="svelte-1mf6xd3"></canvas>`), DeepDiveChart[FILENAME], [[423, 2]]);
 
 	function DeepDiveChart($$anchor, $$props) {
 		check_target(new.target);
@@ -22567,8 +22551,8 @@ ${properties}`
 
 		// For feature value mapping
 		// Optional prop to determine if higher output is better
-		prop($$props, 'featureEncodings', 19, () => [{}]);
-			let isHigherOutputBetter = prop($$props, 'isHigherOutputBetter', 3, false);
+		let featureEncodings = prop($$props, 'featureEncodings', 19, () => [{}]),
+			isHigherOutputBetter = prop($$props, 'isHigherOutputBetter', 3, false);
 
 		function setBaseValue(baseValues) {
 			if (equals(baseValues.length, 2)) {
@@ -22582,11 +22566,27 @@ ${properties}`
 			}
 		}
 
+		console.log('DeepDiveChart: 1/4 command in file');
+
+		let singleShapValues = tag(user_derived(() => $$props.shapValues[$$props.observationIndex]), 'singleShapValues');
+
 		// todo: we should check fi this is a regression or whatever type we are using and fix things for that
 		let base_value;
 
 		setBaseValue($$props.baseValues);
 		console.log(...log_if_contains_state('log', "baseValues in DeepDiveChart", $$props.baseValues, base_value));
+
+		console.log(...log_if_contains_state('log', "DeepDiveChart: Loaded with props:", {
+			shapValues: $$props.shapValues,
+			selectedFeatureIndex: $$props.selectedFeatureIndex,
+			selectedFeature: $$props.selectedFeature,
+			featureEncodings: featureEncodings(),
+			isHigherOutputBetter: isHigherOutputBetter(),
+			featureNames: $$props.featureNames,
+			observationIndex: $$props.observationIndex
+		}));
+
+		console.log(...log_if_contains_state('log', "DeepDiveChart: singelShapValues:", get(singleShapValues)));
 
 		let chart;
 		let chartCanvas;
@@ -22597,6 +22597,7 @@ ${properties}`
 		let maxCumulativeValue;
 
 		function updateChart(singleShapValues, singleFeatureValues) {
+			console.log(...log_if_contains_state('log', "updateChart called with singleShapValues:", singleShapValues, "and singleFeatureValues:", singleFeatureValues));
 			maxOfData = Math.max(...singleShapValues);
 			minOfData = Math.min(...singleShapValues);
 
@@ -22673,11 +22674,19 @@ ${properties}`
 
 				chart.update();
 			}
+
+			console.log('DeepDiveChart: 3/4 command in file');
 		}
+
+		console.log(...log_if_contains_state('log', "DeepDiveChart: Initializing chart with data", $$props.shapValues[$$props.observationIndex], $$props.featureValues[$$props.observationIndex]));
 
 		let featureValuesSorted = [];
 
-		user_effect(() => updateChart($$props.shapValues[$$props.observationIndex], $$props.featureValues[$$props.observationIndex]));
+		user_effect(() => {
+			console.log('DeepDiveChart: effect 1');
+			updateChart($$props.shapValues[$$props.observationIndex], $$props.featureValues[$$props.observationIndex]);
+			console.log('DeepDiveChart: 4/4 command in file');
+		});
 
 		// Handle screen resize for responsive label rotation
 		function handleResize() {
@@ -22731,12 +22740,13 @@ ${properties}`
 			//  const sortedFeatures = modelFeatures.sort((a, b) => a.feature_order - b.feature_order
 			//                                          );
 			//  
-			maxOfData = Math.max(...$$props.shapValues[0]);
+			console.log("DeepDiveChart: onMount called");
 
-			minOfData = Math.min(...$$props.shapValues[0]);
+			maxOfData = Math.max(...get(singleShapValues));
+			minOfData = Math.min(...get(singleShapValues));
 
 			// Color mapping based on isHigherOutputBetter prop
-			pointBackgroundColor = $$props.shapValues.map((d) => {
+			pointBackgroundColor = get(singleShapValues).map((d) => {
 				const normalizedValue = (d - minOfData) / (maxOfData - minOfData) * 100;
 
 				// If higher output is better, use inverted color mapping (green=high, red=low)
@@ -22753,13 +22763,13 @@ ${properties}`
 				datasets: [
 					{
 						label: 'SHAP Values',
-						data: createCumulativeStartEndRangesFromValues($$props.shapValues, base_value),
+						data: createCumulativeStartEndRangesFromValues(get(singleShapValues), base_value),
 						pointBackgroundColor
 					}
 				]
 			};
 
-			console.log(...log_if_contains_state('log', "IN DEEPDIVE data", data));
+			console.log(...log_if_contains_state('log', "IN DEEPDIVE data", data, $$props.featureNames));
 
 			const config = {
 				type: 'bar',
@@ -22841,11 +22851,11 @@ ${properties}`
 								// const description = featureDescriptions[index]; // Description not needed for datalabel
 								let featureValue = featureValuesSorted[index];
 
-								if (strict_equals(featureValueNameMapping[index], null, false)) {
-									// ... existing console logs ...
-									featureValue = featureValueNameMapping[index][featureValue];
-								}
-
+								// if (featureValueNameMapping[index] !== null) {
+								//   // ... existing console logs ...
+								//   featureValue = featureValueNameMapping[index][featureValue];
+								//   formattedFeatureValue = featureValue; // Update after mapping
+								// }
 								let diff = value[1] - value[0];
 
 								const shapLabel = diff > 0
@@ -22940,7 +22950,7 @@ ${properties}`
 			};
 
 			chart = new Chart(chartCanvas, config);
-			updateChart(modelFeatures, explanationDetail);
+			updateChart(get(singleShapValues), get(singleShapValues));
 
 			// Add resize event listener
 			window.addEventListener('resize', handleResize);
@@ -22965,8 +22975,8 @@ ${properties}`
 
 	DeepDiveManager[FILENAME] = 'src/ce_mlflow_extension/templates/components/DeepDiveManager.svelte';
 
-	var root_1 = add_locations(from_html(`<option> </option>`), DeepDiveManager[FILENAME], [[65, 12]]);
-	var root = add_locations(from_html(`<div class="observation-dropdown"><label for="observation-select">Select Observation:</label> <select id="observation-select"></select> <button>Prev</button> <button>Next</button></div> <!>`, 1), DeepDiveManager[FILENAME], [[61, 0, [[62, 4], [63, 4], [68, 4], [69, 4]]]]);
+	var root_1 = add_locations(from_html(`<option> </option>`), DeepDiveManager[FILENAME], [[84, 12]]);
+	var root = add_locations(from_html(`<div><div class="observation-dropdown"><label for="observation-select">Select Observation:</label> <select id="observation-select"></select> <button>Prev</button> <button>Next</button></div> <!></div>`), DeepDiveManager[FILENAME], [[79, 0, [[80, 0, [[81, 4], [82, 4], [87, 4], [88, 4]]]]]]);
 
 	function DeepDiveManager($$anchor, $$props) {
 		check_target(new.target);
@@ -22981,10 +22991,21 @@ ${properties}`
 			isHigherOutputBetter = prop($$props, 'isHigherOutputBetter', 3, false),
 			featureNames = prop($$props, 'featureNames', 19, () => []);
 
+		console.log(...log_if_contains_state('log', 'DeepDiveManager: Loaded with props:', {
+			shapValues: $$props.shapValues,
+			selectedFeatureIndex: $$props.selectedFeatureIndex,
+			selectedFeature: $$props.selectedFeature,
+			featureEncodings: featureEncodings(),
+			isHigherOutputBetter: isHigherOutputBetter(),
+			featureNames: featureNames()
+		}));
+
 		let selectedObservationIndex = tag(state(0), 'selectedObservationIndex');
 		let currentPage = tag(state(0), 'currentPage');
 		let totalObservations = $$props.shapValues.length;
 		let totalPages = Math.ceil(totalObservations / maxDisplayedValues);
+
+		console.log('DeepDiveManager: 1/3 command in file');
 
 		let pagedObservations = tag(
 			user_derived(() => Array.from(
@@ -22999,6 +23020,8 @@ ${properties}`
 			)),
 			'pagedObservations'
 		);
+
+		console.log('DeepDiveManager: 2/3 command in file');
 
 		function nextPage() {
 			if (get(currentPage) < totalPages - 1) {
@@ -23016,11 +23039,18 @@ ${properties}`
 			console.log(...log_if_contains_state('log', 'Selected observation index:', get(selectedObservationIndex)));
 			console.log(...log_if_contains_state('log', 'Current page:', get(currentPage)));
 			console.log(...log_if_contains_state('log', 'Total pages:', totalPages));
+			console.log('DeepDiveManager: 3/3 command in file');
 		});
 
-		var fragment = root();
-		var div = first_child(fragment);
-		var select = sibling(child(div), 2);
+		user_effect(() => {
+			console.log(...log_if_contains_state('log', 'Selected observation index:', get(selectedObservationIndex)));
+			console.log(...log_if_contains_state('log', 'Current page:', get(currentPage)));
+			console.log(...log_if_contains_state('log', 'Total pages:', totalPages));
+		});
+
+		var div = root();
+		var div_1 = child(div);
+		var select = sibling(child(div_1), 2);
 
 		add_svelte_meta(
 			() => each$1(select, 21, () => get(pagedObservations), index, ($$anchor, obs) => {
@@ -23043,14 +23073,14 @@ ${properties}`
 			}),
 			'each',
 			DeepDiveManager,
-			64,
+			83,
 			8
 		);
 
 		var button = sibling(select, 2);
 		var button_1 = sibling(button, 2);
 
-		var node = sibling(div, 2);
+		var node = sibling(div_1, 2);
 
 		add_svelte_meta(
 			() => DeepDiveChart(node, {
@@ -23082,13 +23112,17 @@ ${properties}`
 					return isHigherOutputBetter();
 				},
 
+				get observationIndex() {
+					return get(selectedObservationIndex);
+				},
+
 				get featureNames() {
 					return featureNames();
 				}
 			}),
 			'component',
 			DeepDiveManager,
-			71,
+			90,
 			0,
 			{ componentTag: 'DeepDiveChart' }
 		);
@@ -23101,7 +23135,7 @@ ${properties}`
 		bind_select_value(select, () => get(selectedObservationIndex), ($$value) => set$1(selectedObservationIndex, $$value));
 		event('click', button, prevPage);
 		event('click', button_1, nextPage);
-		append($$anchor, fragment);
+		append($$anchor, div);
 
 		return pop({ ...legacy_api() });
 	}
@@ -23128,6 +23162,7 @@ ${properties}`
 	  let sampleFeatureValues = [];
 	  let sampleBaseValues = [];
 	  let sampleFeatureEncodings = {};
+	  let sampleFeatureNames = [];
 
 	  try {
 	    // Fetch the test data file
@@ -23153,6 +23188,7 @@ ${properties}`
 	      sampleFeatureValues = testReportData.feature_values || [];
 	      sampleBaseValues = testReportData.base_values || [];
 	      sampleFeatureEncodings = testReportData.feature_encodings || {};
+	      sampleFeatureNames = testReportData.feature_names || [];
 	      
 	      console.log('Parsed data:');
 	      console.log('- Importance data:', sampleImportanceData);
@@ -23160,6 +23196,7 @@ ${properties}`
 	      console.log('- Feature values (sample):', sampleFeatureValues.slice(0, 3));
 	      console.log('- Base values (sample):', sampleBaseValues.slice(0, 3));
 	      console.log('- Feature encodings:', sampleFeatureEncodings);
+	      console.log('- Feature Names:', sampleFeatureNames);
 	    } else {
 	      throw new Error(`Failed to load test data: ${response.status}`);
 	    }
@@ -23172,7 +23209,8 @@ ${properties}`
 	    sampleShapValues,
 	    sampleFeatureValues,
 	    sampleBaseValues,
-	    sampleFeatureEncodings
+	    sampleFeatureEncodings,
+	    sampleFeatureNames,
 	  };
 	}
 

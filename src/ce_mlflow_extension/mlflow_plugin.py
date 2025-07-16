@@ -88,7 +88,8 @@ class CEMLflowPlugin:
                 shap_values=shap_values,
                 feature_values=feature_values,
                 base_values=base_values,
-                feature_encodings=feature_encodings
+                feature_encodings=feature_encodings,
+                feature_names=feature_names,
             )
             
             # Log the report as an MLflow artifact
@@ -217,7 +218,8 @@ class CEMLflowPlugin:
         shap_values: List[List[float]],
         feature_values: List[float] = None,
         base_values: List[float] = None,
-        feature_encodings: Optional[Dict[str, Dict[int, str]]] = None
+        feature_encodings: Optional[Dict[str, Dict[int, str]]] = None,
+        feature_names: List[str] = None
     ):
         """
         Generate a custom HTML report with the provided data, inlining the bundle.js
@@ -277,7 +279,8 @@ class CEMLflowPlugin:
                 "shap_values": shap_values,  # Now Python list
                 "feature_values": feature_values,  # Now Python list or None
                 "base_values": base_values,  # Now Python list or None
-                "feature_encodings": feature_encodings  # Optional encodings
+                "feature_encodings": feature_encodings,  # Optional encodings
+                "feature_names": feature_names,  # List of feature names
             }
             json.dump(data_to_save, f, indent=2)
             print(f"Saved report data to test_report_data.json")
@@ -291,6 +294,7 @@ class CEMLflowPlugin:
             feature_values=feature_values,  # Pass as Python list or None
             base_values=base_values,  # Pass as Python list or None
             feature_encodings=feature_encodings,  # Pass as optional dict
+            feature_names=feature_names,  # Pass as list
             bundle_js_content=bundle_js_content  # Pass the bundle content
         )
         

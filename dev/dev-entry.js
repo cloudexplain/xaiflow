@@ -26,6 +26,7 @@ async function loadTestData() {
   let sampleFeatureValues = [];
   let sampleBaseValues = [];
   let sampleFeatureEncodings = {};
+  let sampleFeatureNames = [];
 
   try {
     // Fetch the test data file
@@ -51,6 +52,7 @@ async function loadTestData() {
       sampleFeatureValues = testReportData.feature_values || [];
       sampleBaseValues = testReportData.base_values || [];
       sampleFeatureEncodings = testReportData.feature_encodings || {};
+      sampleFeatureNames = testReportData.feature_names || [];
       
       console.log('Parsed data:');
       console.log('- Importance data:', sampleImportanceData);
@@ -58,6 +60,7 @@ async function loadTestData() {
       console.log('- Feature values (sample):', sampleFeatureValues.slice(0, 3));
       console.log('- Base values (sample):', sampleBaseValues.slice(0, 3));
       console.log('- Feature encodings:', sampleFeatureEncodings);
+      console.log('- Feature Names:', sampleFeatureNames);
     } else {
       throw new Error(`Failed to load test data: ${response.status}`);
     }
@@ -70,7 +73,8 @@ async function loadTestData() {
     sampleShapValues,
     sampleFeatureValues,
     sampleBaseValues,
-    sampleFeatureEncodings
+    sampleFeatureEncodings,
+    sampleFeatureNames,
   };
 }
 

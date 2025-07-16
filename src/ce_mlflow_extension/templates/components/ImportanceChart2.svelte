@@ -27,21 +27,22 @@
   const MAX_DISPLAYED_ITEMS: number = 20;
 
   // Derived values using $derived with safety checks
+  console.log('ImportanceChart2: 1/6 command in file');
   const orderedData = $derived(
     Array.isArray(data) ? [...data].sort((a, b) => b.importance - a.importance) : []
   );
-
+  console.log('ImportanceChart2: 2/6 command in file');
   const totalImportance = $derived(
     orderedData.length > 0 ? orderedData.reduce((sum, item) => sum + Math.abs(item.importance), 0) : 1
   );
-
+  console.log('ImportanceChart2: 3/6 command in file');
   const percentageData = $derived(
     orderedData.map(item => ({
       feature_name: item.feature_name,
       importance: Math.round((Math.abs(item.importance) / totalImportance) * 10000) / 100
     }))
   );
-
+  console.log('ImportanceChart2: 4/6 command in file');
   const displayData = $derived(
     percentageData.length > MAX_DISPLAYED_ITEMS 
       ? (() => {
@@ -57,10 +58,11 @@
         })()
       : percentageData
   );
-
+  console.log('ImportanceChart2: 5/6 command in file', displayData);
   let maxY = $derived(
     Math.max(...displayData.map(item => item.importance)) * 1.1
   );
+  console.log('ImportanceChart2: after 5/6 command in file', maxY);
 
   // Effect to initialize canvas cleanup
   $effect(() => {

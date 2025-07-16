@@ -32,16 +32,7 @@
         isHigherOutputBetter,
     });
 
-    $effect(() => {
-        console.log('ScatterShapValues: Props changed:', {
-            shapValues,
-            selectedFeatureIndex,
-            selectedFeature,
-            isHigherOutputBetter,
-            featureEncodings
-        });
-    });
-
+    console.log('ScatterShapValues: 1/5 command in file');
     let dataToPlot = $derived(
         shapValues.map((row, index) => {
                 return {
@@ -50,8 +41,7 @@
                 };
             })
     );
-    
-    console.log("ScatterShapValues: before second mapping row");
+    console.log('ScatterShapValues: 2/5 command in file');
     // Color mapping based on isHigherOutputBetter prop
     let pointBackgroundColor = $derived(dataToPlot.map(d => {
         // const normalizedValue = (d.y - minOfData) / (maxOfData - minOfData) * 100;
@@ -64,9 +54,9 @@
         return '#36a2eb'; // Default color, replace with colorMap logic if needed
         // return colorMap(colorValue);
     }));
-
-    console.log("ScatterShapValues: before third mapping row");
+    console.log('ScatterShapValues: 3/5 command in file');
     let labels = $derived([... new Set(dataToPlot.map(d => d.x))]);
+    console.log('ScatterShapValues: 4/5 command in file');
 
     // Helper: get y-axis label mapping from featureEncodings if available
 function getXAxisLabelMap() {
