@@ -44,6 +44,10 @@
             height: 500px;
             margin-top: 20px;
         }
+        #importance-chart2-container {
+            height: 600px;
+            margin-top: 20px;
+        }
         #simple-display-container {
             margin-top: 20px;
         }
@@ -64,8 +68,14 @@
 
         <!-- Feature Importance Chart -->
         <div class="section">
-            <h2>Feature Importance</h2>
+            <h2>Feature Importance (Original)</h2>
             <div id="importance-chart-container"></div>
+        </div>
+        
+        <!-- New Interactive Feature Importance Chart -->
+        <div class="section">
+            <h2>Interactive Feature Importance</h2>
+            <div id="importance-chart2-container"></div>
         </div>
         
         <!-- Simple Svelte Component -->
@@ -89,6 +99,8 @@
             
             // Debug: Check what's available on window
             console.log('window.ImportanceChart:', window.ImportanceChart);
+            console.log('window.ImportanceChart2:', window.ImportanceChart2);
+            console.log('window.ChartManager:', window.ChartManager);
             console.log('window.SimpleDisplay:', window.SimpleDisplay);
             console.log('Available window properties:', Object.keys(window).filter(key => key.includes('Chart') || key.includes('Display')));
             
@@ -111,7 +123,6 @@
                     console.log('ImportanceChart mounted successfully!');
                 } catch (error) {
                     console.error('Error mounting ImportanceChart:', error);
-                    console.error('Error details:', error.stack);
                 }
             } else {
                 console.error('ImportanceChart component not found or no data provided');
@@ -121,7 +132,6 @@
             
             // Initialize SimpleDisplay component
             if (window.SimpleDisplay) {
-                try {
                     new window.SimpleDisplay({
                         target: document.getElementById('simple-display-container'),
                         props: {
@@ -130,12 +140,35 @@
                         }
                     });
                     console.log('SimpleDisplay component mounted successfully!');
-                } catch (error) {
-                    console.error('Error mounting SimpleDisplay:', error);
-                    console.error('Error details:', error.stack);
-                }
             } else {
                 console.error('SimpleDisplay component not found');
+            }
+            
+            // Initialize ImportanceChart2 with ChartManager for reactive state
+            if (window.ChartManager && importanceData) {
+                try {
+                    // Transform data to the expected format for ImportanceChart2
+                    const chartData = importanceData.features.map((feature, index) => ({
+                        feature_name: feature,
+                        importance: importanceData.values[index]
+                    }));
+                    
+                    console.log('Chart data for ImportanceChart2:', chartData);
+                    
+                    new window.ChartManager({
+                        target: document.getElementById('importance-chart2-container'),
+                        props: {
+                            importanceData: chartData
+                        }
+                    });
+                    console.log('ChartManager with ImportanceChart2 mounted successfully!');
+                } catch (error) {
+                    console.error('Error mounting ChartManager:', error);
+                }
+            } else {
+                console.error('ChartManager component not found or no data provided');
+                console.log('window.ChartManager exists:', !!window.ChartManager);
+                console.log('importanceData exists:', !!importanceData);
             }
         });
     </script>
