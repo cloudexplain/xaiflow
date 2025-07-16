@@ -4,11 +4,12 @@
   
   // Props using Svelte 5 runes
   interface Props {
-    importanceData?: { feature_name: string; importance: number }[];
-    shapValues?: number[][];
+    importanceData: { feature_name: string; importance: number }[];
+    shapValues: number[][];
+    featureValues: number[][];
   }
   
-  let { importanceData = [], shapValues = [] }: Props = $props();
+  let { importanceData, shapValues, featureValues }: Props = $props();
   
   // Reactive state for selected label using $state
   let selectedLabel: string | null = $state(null);
@@ -21,6 +22,7 @@
   console.log('ChartManager: called');
   console.log('ChartManager: importanceData:', importanceData);
   console.log('ChartManager: selectedLabel:', selectedLabel);
+  console.log('ChartManager: featureValues:', featureValues);
   
   // Handle label selection changes
   function handleLabelSelection(event: CustomEvent<string | null>) {
@@ -52,6 +54,7 @@
       <div class="chart-container">
         <ScatterShapValues 
           shapValues={shapValues} 
+          featureValues={featureValues}
           bind:selectedFeatureIndex={selectedFeatureIndex} 
           selectedFeature="Feature Name" 
           bind:selectedLabel={selectedLabel}

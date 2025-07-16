@@ -67,6 +67,10 @@
       : percentageData
   );
 
+  let maxY = $derived(
+    Math.max(...displayData.map(item => item.importance)) * 1.1
+  );
+
   // Effect to initialize canvas cleanup
   $effect(() => {
     if (!chartCanvas) return;
@@ -174,7 +178,7 @@
         scales: {
           x: {
             beginAtZero: true,
-            max: 100,
+            max: Math.ceil(maxY * 1.05 / 10) * 10,
             ticks: {
               callback: function(value) {
                 return value + '%';

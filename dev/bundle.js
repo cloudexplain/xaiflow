@@ -15924,7 +15924,7 @@ ${properties}`
 
 	ImportanceChart2[FILENAME] = 'src/ce_mlflow_extension/templates/components/ImportanceChart2.svelte';
 
-	var root$4 = add_locations(from_html(`<div class="importance-chart-container svelte-x4pm9k"><canvas class="svelte-x4pm9k"></canvas></div>`), ImportanceChart2[FILENAME], [[239, 0, [[240, 2]]]]);
+	var root$4 = add_locations(from_html(`<div class="importance-chart-container svelte-x4pm9k"><canvas class="svelte-x4pm9k"></canvas></div>`), ImportanceChart2[FILENAME], [[243, 0, [[244, 2]]]]);
 
 	function ImportanceChart2($$anchor, $$props) {
 		check_target(new.target);
@@ -16002,6 +16002,8 @@ ${properties}`
 				: get(percentageData)),
 			'displayData'
 		);
+
+		let maxY = tag(user_derived(() => Math.max(...get(displayData).map((item) => item.importance)) * 1.1), 'maxY');
 
 		// Effect to initialize canvas cleanup
 		user_effect(() => {
@@ -16113,7 +16115,7 @@ ${properties}`
 							scales: {
 								x: {
 									beginAtZero: true,
-									max: 100,
+									max: Math.ceil(get(maxY) * 1.05 / 10) * 10,
 
 									ticks: {
 										callback(value) {
@@ -16221,14 +16223,10 @@ ${properties}`
 			}));
 		});
 
-		console.log("ScatterShapValues: before first mapping row");
-
 		let dataToPlot = tag(
 			user_derived(() => $$props.shapValues.map((row, index) => {
-				console.log(...log_if_contains_state('log', 'Mapping row:', row, 'for feature:', $$props.selectedFeature));
-
 				return {
-					x: $$props.selectedFeature,
+					x: $$props.featureValues[index][$$props.selectedFeatureIndex],
 					y: row[$$props.selectedFeatureIndex]
 				};
 			})),
@@ -16426,18 +16424,18 @@ ${properties}`
 
 	ChartManager[FILENAME] = 'src/ce_mlflow_extension/templates/components/ChartManager.svelte';
 
-	var root_1 = add_locations(from_html(`<div class="selected-info svelte-1m7zl40"><p class="svelte-1m7zl40"><strong>Selected Feature:</strong> </p></div>`), ChartManager[FILENAME], [[65, 4, [[66, 6, [[66, 9]]]]]]);
+	var root_1 = add_locations(from_html(`<div class="selected-info svelte-1m7zl40"><p class="svelte-1m7zl40"><strong>Selected Feature:</strong> </p></div>`), ChartManager[FILENAME], [[68, 4, [[69, 6, [[69, 9]]]]]]);
 
 	var root$2 = add_locations(from_html(`<div class="chart-manager svelte-1m7zl40"><div class="charts-row svelte-1m7zl40"><div class="chart-section svelte-1m7zl40"><h3 class="svelte-1m7zl40">Feature Importance Chart</h3> <div class="chart-container svelte-1m7zl40"><!></div></div> <div class="chart-section svelte-1m7zl40"><h3 class="svelte-1m7zl40">SHAP Values</h3> <div class="chart-container svelte-1m7zl40"><!></div></div></div> <!></div>`), ChartManager[FILENAME], [
 		[
-			37,
+			39,
 			0,
 
 			[
 				[
-					38,
+					40,
 					2,
-					[[39, 4, [[40, 6], [41, 6]]], [50, 4, [[51, 6], [52, 6]]]]
+					[[41, 4, [[42, 6], [43, 6]]], [52, 4, [[53, 6], [54, 6]]]]
 				]
 			]
 		]
@@ -16448,19 +16446,17 @@ ${properties}`
 		push($$props, true, ChartManager);
 
 		// Props using Svelte 5 runes
-		let importanceData = prop($$props, 'importanceData', 19, () => []),
-			shapValues = prop($$props, 'shapValues', 19, () => []);
-
 		// Reactive state for selected label using $state
 		let selectedLabel = tag(state(null), 'selectedLabel');
 
-		console.log(...log_if_contains_state('log', "ChartManager", importanceData()));
+		console.log(...log_if_contains_state('log', "ChartManager", $$props.importanceData));
 
-		let featureNames = tag(user_derived(() => importanceData().map((item) => item.feature_name)), 'featureNames');
+		let featureNames = tag(user_derived(() => $$props.importanceData.map((item) => item.feature_name)), 'featureNames');
 
 		console.log('ChartManager: called');
-		console.log(...log_if_contains_state('log', 'ChartManager: importanceData:', importanceData()));
+		console.log(...log_if_contains_state('log', 'ChartManager: importanceData:', $$props.importanceData));
 		console.log(...log_if_contains_state('log', 'ChartManager: selectedLabel:', get(selectedLabel)));
+		console.log(...log_if_contains_state('log', 'ChartManager: featureValues:', $$props.featureValues));
 
 		// Handle label selection changes
 		function handleLabelSelection(event) {
@@ -16483,7 +16479,7 @@ ${properties}`
 		add_svelte_meta(
 			() => ImportanceChart2(node, {
 				get data() {
-					return importanceData();
+					return $$props.importanceData;
 				},
 
 				get selectedLabel() {
@@ -16498,7 +16494,7 @@ ${properties}`
 			}),
 			'component',
 			ChartManager,
-			42,
+			44,
 			8,
 			{ componentTag: 'ImportanceChart2' }
 		);
@@ -16510,7 +16506,11 @@ ${properties}`
 		add_svelte_meta(
 			() => ScatterShapValues(node_1, {
 				get shapValues() {
-					return shapValues();
+					return $$props.shapValues;
+				},
+
+				get featureValues() {
+					return $$props.featureValues;
 				},
 
 				selectedFeature: 'Feature Name',
@@ -16534,7 +16534,7 @@ ${properties}`
 			}),
 			'component',
 			ChartManager,
-			53,
+			55,
 			8,
 			{ componentTag: 'ScatterShapValues' }
 		);
@@ -16556,7 +16556,7 @@ ${properties}`
 				}),
 				'if',
 				ChartManager,
-				64,
+				67,
 				2
 			);
 		}
@@ -16731,25 +16731,7 @@ ${properties}`
 
 	// Development entry point for testing Svelte components
 
-	// Sample data that matches your MLflow plugin structure
-	const sampleImportanceData = [
-	  { feature_name: "age", importance: 0.25 },
-	  { feature_name: "income", importance: 0.20 },
-	  { feature_name: "education_years", importance: 0.15 },
-	  { feature_name: "credit_score", importance: 0.15 },
-	  { feature_name: "debt_ratio", importance: 0.10 },
-	  { feature_name: "employment_years", importance: 0.10 },
-	  { feature_name: "property_value", importance: 0.05 }
-	];
-
-	const sampleShapValues = [
-	  [0.2, 0.4, 0.5, 0.6, 0.1, 0.2, 0.1],
-	  [-0.2, -0.4, -0.5, -0.6, -0.1, -0.2, -0.1],
-	  [0.1, 0.3, 0.4, 0.3, 0.2, 0.1, 0.05],
-	  [-0.1, -0.3, -0.4, -0.3, -0.2, -0.1, -0.05]
-	];
-
-	// Export components and data to global scope for testing
+	// Export components immediately
 	window.DevComponents = {
 	  ChartManager,
 	  ImportanceChart,
@@ -16758,17 +16740,76 @@ ${properties}`
 	  ScatterShapValues
 	};
 
-	window.DevData = {
-	  sampleImportanceData,
-	  sampleShapValues
-	};
-
 	// Export Svelte 5 mount function
 	window.mount = mount;
 
+	// Function to load data asynchronously
+	async function loadTestData() {
+	  let testReportData = null;
+	  let sampleImportanceData = [];
+	  let sampleShapValues = [];
+	  let sampleFeatureValues = [];
+	  let sampleBaseValues = [];
+
+	  try {
+	    // Fetch the test data file
+	    const response = await fetch('../test_report_data.json');
+	    if (response.ok) {
+	      testReportData = await response.json();
+	      console.log('Loaded test report data:', testReportData);
+	      
+	      // Extract and transform data from the loaded JSON
+	      if (testReportData.importance_data && testReportData.importance_data.features && testReportData.importance_data.values) {
+	        // Transform importance data to the expected format
+	        sampleImportanceData = testReportData.importance_data.features.map((feature, index) => ({
+	          feature_name: feature,
+	          importance: testReportData.importance_data.values[index]
+	        }));
+	      } else {
+	        sampleImportanceData = [];
+	      }
+	      
+	      sampleShapValues = testReportData.shap_values || [];
+	      sampleFeatureValues = testReportData.feature_values || [];
+	      sampleBaseValues = testReportData.base_values || [];
+	      
+	      console.log('Parsed data:');
+	      console.log('- Importance data:', sampleImportanceData);
+	      console.log('- SHAP values (sample):', sampleShapValues.slice(0, 3));
+	      console.log('- Feature values (sample):', sampleFeatureValues.slice(0, 3));
+	      console.log('- Base values (sample):', sampleBaseValues.slice(0, 3));
+	    } else {
+	      throw new Error(`Failed to load test data: ${response.status}`);
+	    }
+	  } catch (error) {
+	    console.warn('Could not load test_report_data.json, using fallback data:', error);
+	    
+	    // Fallback to hardcoded sample data
+	    sampleImportanceData = [
+	      { feature_name: "age", importance: 0.25 },
+	      { feature_name: "income", importance: 0.20 },
+	      { feature_name: "education_years", importance: 0.15 },
+	      { feature_name: "credit_score", importance: 0.15 },
+	      { feature_name: "debt_ratio", importance: 0.10 },
+	      { feature_name: "employment_years", importance: 0.10 },
+	      { feature_name: "property_value", importance: 0.05 }
+	    ];
+	  }
+
+	  return {
+	    sampleImportanceData,
+	    sampleShapValues,
+	    sampleFeatureValues,
+	    sampleBaseValues
+	  };
+	}
+
+	// Make data loading function available globally
+	window.loadTestData = loadTestData;
+
 	console.log('Development components loaded:', Object.keys(window.DevComponents));
-	console.log('Development data loaded:', Object.keys(window.DevData));
 	console.log('Svelte mount function available:', typeof window.mount);
+	console.log('Test data loader available:', typeof window.loadTestData);
 
 })();
 //# sourceMappingURL=bundle.js.map

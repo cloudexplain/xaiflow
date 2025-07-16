@@ -8,6 +8,7 @@
 
   interface Props {
     shapValues: number[][];
+    featureValues: number[][];
     selectedFeatureIndex: number;
     selectedFeature: string;
     featureValueNameMapping?: { [key: string]: any }[]; // For feature value mapping
@@ -15,6 +16,7 @@
   }
 
     let { shapValues,
+          featureValues,
           selectedFeatureIndex,
           selectedFeature,
           featureValueNameMapping= [],
@@ -40,12 +42,10 @@
         });
     });
 
-    console.log("ScatterShapValues: before first mapping row");
     let dataToPlot = $derived(
         shapValues.map((row, index) => {
-            console.log('Mapping row:', row, 'for feature:', selectedFeature);
             return {
-                x: selectedFeature,
+                x: featureValues[index][selectedFeatureIndex],
                 y: row[selectedFeatureIndex]
             };
         })
