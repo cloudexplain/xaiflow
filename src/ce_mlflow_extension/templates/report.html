@@ -111,6 +111,7 @@
                     console.log('ImportanceChart mounted successfully!');
                 } catch (error) {
                     console.error('Error mounting ImportanceChart:', error);
+                    console.error('Error details:', error.stack);
                 }
             } else {
                 console.error('ImportanceChart component not found or no data provided');
@@ -120,14 +121,19 @@
             
             // Initialize SimpleDisplay component
             if (window.SimpleDisplay) {
-                new window.SimpleDisplay({
-                    target: document.getElementById('simple-display-container'),
-                    props: {
-                        randomNumber: {{ random_number }},
-                        title: "Svelte Display"
-                    }
-                });
-                console.log('SimpleDisplay component mounted successfully!');
+                try {
+                    new window.SimpleDisplay({
+                        target: document.getElementById('simple-display-container'),
+                        props: {
+                            randomNumber: {{ random_number }},
+                            title: "Svelte Display"
+                        }
+                    });
+                    console.log('SimpleDisplay component mounted successfully!');
+                } catch (error) {
+                    console.error('Error mounting SimpleDisplay:', error);
+                    console.error('Error details:', error.stack);
+                }
             } else {
                 console.error('SimpleDisplay component not found');
             }

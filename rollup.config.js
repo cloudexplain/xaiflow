@@ -16,7 +16,11 @@ export default {
   plugins: [
     svelte({
       compilerOptions: {
-        dev: !production
+        dev: !production,
+        // Enable legacy mode for Svelte 5 to maintain Svelte 4 compatibility
+        compatibility: {
+          componentApi: 4
+        }
       },
       emitCss: false
     }),

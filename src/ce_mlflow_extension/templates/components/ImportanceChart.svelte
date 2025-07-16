@@ -11,10 +11,10 @@
     let chart;
 
     onMount(() => {
-        console.log('ImportanceChart onMount called');
-        console.log('Global Chart object:', window.Chart);
-        console.log('chartContainer:', chartContainer);
-        console.log('importanceValues:', importanceValues);
+        console.log('ImportanceChart: ImportanceChart onMount called');
+        console.log('ImportanceChart: Global Chart object:', window.Chart);
+        console.log('ImportanceChart: chartContainer:', chartContainer);
+        console.log('ImportanceChart: importanceValues:', importanceValues);
         
         if (chartContainer && importanceValues.length > 0 && window.Chart) {
             try {
