@@ -17,11 +17,9 @@ from sklearn.metrics import mean_squared_error
 from sklearn.datasets import fetch_openml
 from sklearn.preprocessing import LabelEncoder
 
-# Add the src directory to the path
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
 try:
-    from ce_mlflow_extension.mlflow_plugin import CEMLflowPlugin
+    from xflow.mlflow_plugin import CEMLflowPlugin
     print("✅ Successfully imported CEMLflowPlugin")
 except Exception as e:
     print(f"❌ Error importing plugin: {e}")
