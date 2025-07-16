@@ -111,11 +111,11 @@
             console.log('window.ScatterShapValues:', window.ScatterShapValues);
             console.log('Available window properties:', Object.keys(window).filter(key => key.includes('Chart') || key.includes('Display')));
             
-            // Data passed from Python
-            const importanceData = {{ importance_data | safe }};
-            const shapValues = {{ shap_values | safe }};
-            const featureValues = {{ feature_values | safe }};
-            const baseValues = {{ base_values | safe }};
+            // Data passed from Python (using Jinja2's tojson filter)
+            const importanceData = {{ importance_data | tojson }};
+            const shapValues = {{ shap_values | tojson }};
+            const featureValues = {{ feature_values | tojson }};
+            const baseValues = {{ base_values | tojson }};
             
             console.log('Overview: Importance data:', importanceData);
             console.log('Overview: shapValues data:', shapValues);

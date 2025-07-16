@@ -259,14 +259,45 @@ class CEMLflowPlugin:
         random_number = random.randint(1, 1000)
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        # Render the template with data
+        # Convert numpy arrays to Python lists for JSON serialization
+        if isinstance(shap_values, np.ndarray):
+            shap_values = shap_values.tolist()
+        elif hasattr(shap_values, 'tolist'):
+            shap_values = shap_values.tolist()
+        
+        if feature_values is not None:
+            if isinstance(feature_values, np.ndarray):
+                feature_values = feature_values.tolist()
+            elif hasattr(feature_values, 'tolist'):
+                feature_values = feature_values.tolist()
+        
+        if base_values is not None:
+            if isinstance(base_values, np.ndarray):
+                base_values = base_values.tolist()
+            elif hasattr(base_values, 'tolist'):
+                base_values = base_values.tolist()
+        
+        # Save all data to be used in the report
+        with open('test_report_data.json', 'w', encoding='utf-8') as f:
+            data_to_save = {
+                "random_number": random_number,
+                "timestamp": current_time,
+                "importance_data": importance_data,  # Already Python dict
+                "shap_values": shap_values,  # Now Python list
+                "feature_values": feature_values,  # Now Python list or None
+                "base_values": base_values,  # Now Python list or None
+            }
+            json.dump(data_to_save, f, indent=2)
+            print(f"Saved report data to test_report_data.json")
+        
+        # Render the template with data (no json.dumps needed since Jinja2 handles it)
         html_content = template.render(
             random_number=random_number,
             timestamp=current_time,
-            importance_data=json.dumps(importance_data),
-            shap_values=json.dumps(shap_values, default=str),
-            feature_values=json.dumps(feature_values, default=str) if feature_values is not None else None,
-            base_values=json.dumps(base_values, default=str) if base_values is not None else None,
+            importance_data=importance_data,  # Pass as Python dict
+            shap_values=shap_values,  # Pass as Python list
+            feature_values=feature_values,  # Pass as Python list or None
+            base_values=base_values,  # Pass as Python list or None
             bundle_js_content=bundle_js_content  # Pass the bundle content
         )
         
