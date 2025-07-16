@@ -348,8 +348,6 @@
 	const PROPS_IS_UPDATED = 1 << 2;
 	const PROPS_IS_BINDABLE = 1 << 3;
 	const PROPS_IS_LAZY_INITIAL = 1 << 4;
-
-	const TEMPLATE_FRAGMENT = 1;
 	const TEMPLATE_USE_IMPORT_NODE = 1 << 1;
 
 	const UNINITIALIZED = Symbol();
@@ -2604,24 +2602,6 @@ ${properties}`
 
 	/**
 	 * Don't mark this as side-effect-free, hydration needs to walk all nodes
-	 * @param {DocumentFragment | TemplateNode[]} fragment
-	 * @param {boolean} is_text
-	 * @returns {Node | null}
-	 */
-	function first_child(fragment, is_text) {
-		{
-			// when not hydrating, `fragment` is a `DocumentFragment` (the result of calling `open_frag`)
-			var first = /** @type {DocumentFragment} */ (get_first_child(/** @type {Node} */ (fragment)));
-
-			// TODO prevent user comments with the empty string when preserveComments is true
-			if (first instanceof Comment && first.data === '') return get_next_sibling(first);
-
-			return first;
-		}
-	}
-
-	/**
-	 * Don't mark this as side-effect-free, hydration needs to walk all nodes
 	 * @param {TemplateNode} node
 	 * @param {number} count
 	 * @param {boolean} is_text
@@ -4185,7 +4165,6 @@ ${properties}`
 	 */
 	/*#__NO_SIDE_EFFECTS__*/
 	function from_html(content, flags) {
-		var is_fragment = (flags & TEMPLATE_FRAGMENT) !== 0;
 		var use_import_node = (flags & TEMPLATE_USE_IMPORT_NODE) !== 0;
 
 		/** @type {Node} */
@@ -4201,19 +4180,14 @@ ${properties}`
 
 			if (node === undefined) {
 				node = create_fragment_from_html(has_start ? content : '<!>' + content);
-				if (!is_fragment) node = /** @type {Node} */ (get_first_child(node));
+				node = /** @type {Node} */ (get_first_child(node));
 			}
 
 			var clone = /** @type {TemplateNode} */ (
 				use_import_node || is_firefox ? document.importNode(node, true) : node.cloneNode(true)
 			);
 
-			if (is_fragment) {
-				var start = /** @type {TemplateNode} */ (get_first_child(clone));
-				var end = /** @type {TemplateNode} */ (clone.lastChild);
-
-				assign_nodes(start, end);
-			} else {
+			{
 				assign_nodes(clone, clone);
 			}
 
@@ -4393,113 +4367,6 @@ ${properties}`
 			$on: () => error('$on(...)'),
 			$set: () => error('$set(...)')
 		};
-	}
-
-	/** @import { Effect, TemplateNode } from '#client' */
-	/** @import { Batch } from '../../reactivity/batch.js'; */
-
-	// TODO reinstate https://github.com/sveltejs/svelte/pull/15250
-
-	/**
-	 * @param {TemplateNode} node
-	 * @param {(branch: (fn: (anchor: Node) => void, flag?: boolean) => void) => void} fn
-	 * @param {boolean} [elseif] True if this is an `{:else if ...}` block rather than an `{#if ...}`, as that affects which transitions are considered 'local'
-	 * @returns {void}
-	 */
-	function if_block(node, fn, elseif = false) {
-
-		var anchor = node;
-
-		/** @type {Effect | null} */
-		var consequent_effect = null;
-
-		/** @type {Effect | null} */
-		var alternate_effect = null;
-
-		/** @type {UNINITIALIZED | boolean | null} */
-		var condition = UNINITIALIZED;
-
-		var flags = elseif ? EFFECT_TRANSPARENT : 0;
-
-		var has_branch = false;
-
-		const set_branch = (/** @type {(anchor: Node) => void} */ fn, flag = true) => {
-			has_branch = true;
-			update_branch(flag, fn);
-		};
-
-		/** @type {DocumentFragment | null} */
-		var offscreen_fragment = null;
-
-		function commit() {
-			if (offscreen_fragment !== null) {
-				// remove the anchor
-				/** @type {Text} */ (offscreen_fragment.lastChild).remove();
-
-				anchor.before(offscreen_fragment);
-				offscreen_fragment = null;
-			}
-
-			var active = condition ? consequent_effect : alternate_effect;
-			var inactive = condition ? alternate_effect : consequent_effect;
-
-			if (active) {
-				resume_effect(active);
-			}
-
-			if (inactive) {
-				pause_effect(inactive, () => {
-					if (condition) {
-						alternate_effect = null;
-					} else {
-						consequent_effect = null;
-					}
-				});
-			}
-		}
-
-		const update_branch = (
-			/** @type {boolean | null} */ new_condition,
-			/** @type {null | ((anchor: Node) => void)} */ fn
-		) => {
-			if (condition === (condition = new_condition)) return;
-
-			var defer = should_defer_append();
-			var target = anchor;
-
-			if (defer) {
-				offscreen_fragment = document.createDocumentFragment();
-				offscreen_fragment.append((target = create_text()));
-			}
-
-			if (condition) {
-				consequent_effect ??= fn && branch(() => fn(target));
-			} else {
-				alternate_effect ??= fn && branch(() => fn(target));
-			}
-
-			if (defer) {
-				var batch = /** @type {Batch} */ (current_batch);
-
-				var active = condition ? consequent_effect : alternate_effect;
-				var inactive = condition ? alternate_effect : consequent_effect;
-
-				if (active) batch.skipped_effects.delete(active);
-				if (inactive) batch.skipped_effects.add(inactive);
-
-				batch.add_callback(commit);
-			} else {
-				commit();
-			}
-		};
-
-		block(() => {
-			has_branch = false;
-			fn(set_branch);
-			if (!has_branch) {
-				update_branch(null, null);
-			}
-		}, flags);
 	}
 
 	/** @import { EachItem, EachState, Effect, MaybeSource, Source, TemplateNode, TransitionManager, Value } from '#client' */
@@ -17716,9 +17583,7 @@ ${properties}`
 
 	ChartManager[FILENAME] = 'src/ce_mlflow_extension/templates/components/ChartManager.svelte';
 
-	var root_1$1 = add_locations(from_html(`<div class="selected-info svelte-169j5gc"><p class="svelte-169j5gc"><strong>Selected Feature:</strong> </p></div>`), ChartManager[FILENAME], [[74, 4, [[75, 6, [[75, 9]]]]]]);
-
-	var root$2 = add_locations(from_html(`<div class="chart-manager svelte-169j5gc"><div class="charts-row svelte-169j5gc"><div class="chart-section svelte-169j5gc"><h3 class="svelte-169j5gc">Feature Importance Chart</h3> <div class="chart-container svelte-169j5gc"><!></div></div> <div class="chart-section svelte-169j5gc"><h3 class="svelte-169j5gc">SHAP Values</h3> <div class="chart-container svelte-169j5gc"><!></div></div></div> <!></div>`), ChartManager[FILENAME], [
+	var root$2 = add_locations(from_html(`<div class="chart-manager svelte-169j5gc"><div class="charts-row svelte-169j5gc"><div class="chart-section svelte-169j5gc"><h3 class="svelte-169j5gc">Feature Importance Chart</h3> <div class="chart-container svelte-169j5gc"><!></div></div> <div class="chart-section svelte-169j5gc"><h3 class="svelte-169j5gc">SHAP Values</h3> <div class="chart-container svelte-169j5gc"><!></div></div></div></div>`), ChartManager[FILENAME], [
 		[
 			44,
 			0,
@@ -17844,28 +17709,6 @@ ${properties}`
 			8,
 			{ componentTag: 'ScatterShapValues' }
 		);
-
-		var node_2 = sibling(div_1, 2);
-
-		{
-			var consequent = ($$anchor) => {
-				var div_6 = root_1$1();
-				var p = child(div_6);
-				var text = sibling(child(p));
-				template_effect(() => set_text(text, ` ${get(selectedLabel) ?? ''}`));
-				append($$anchor, div_6);
-			};
-
-			add_svelte_meta(
-				() => if_block(node_2, ($$render) => {
-					if (get(selectedLabel)) $$render(consequent);
-				}),
-				'if',
-				ChartManager,
-				73,
-				2
-			);
-		}
 		append($$anchor, div);
 
 		return pop({ ...legacy_api() });
@@ -19271,7 +19114,7 @@ ${properties}`
 
 	DeepDiveChart[FILENAME] = 'src/ce_mlflow_extension/templates/components/DeepDiveChart.svelte';
 
-	var root$1 = add_locations(from_html(`<canvas class="svelte-1mf6xd3"></canvas> <div>Dummy</div>`, 1), DeepDiveChart[FILENAME], [[422, 2], [423, 2]]);
+	var root$1 = add_locations(from_html(`<canvas class="svelte-1mf6xd3"></canvas>`), DeepDiveChart[FILENAME], [[427, 2]]);
 
 	function DeepDiveChart($$anchor, $$props) {
 		check_target(new.target);
@@ -19302,6 +19145,7 @@ ${properties}`
 		console.log('DeepDiveChart: 1/4 command in file');
 
 		let singleShapValues = tag(user_derived(() => $$props.shapValues[$$props.observationIndex]), 'singleShapValues');
+		let singleFeatureValues = tag(user_derived(() => $$props.featureValues[$$props.observationIndex]), 'singleFeatureValues');
 
 		// todo: we should check fi this is a regression or whatever type we are using and fix things for that
 		let base_value;
@@ -19329,8 +19173,8 @@ ${properties}`
 		let cumulativeValues;
 		let maxCumulativeValue;
 
-		function updateChart(singleShapValues, singleFeatureValues) {
-			console.log(...log_if_contains_state('log', "updateChart called with singleShapValues:", singleShapValues, "and singleFeatureValues:", singleFeatureValues));
+		function updateChart(singleShapValues) {
+			console.log(...log_if_contains_state('log', "updateChart called with singleShapValues:", singleShapValues, "and singleFeatureValues:", get(singleFeatureValues)));
 			maxOfData = Math.max(...singleShapValues);
 			minOfData = Math.min(...singleShapValues);
 
@@ -19418,7 +19262,7 @@ ${properties}`
 
 		user_effect(() => {
 			console.log('DeepDiveChart: effect 1');
-			updateChart($$props.shapValues[$$props.observationIndex], $$props.featureValues[$$props.observationIndex]);
+			updateChart($$props.shapValues[$$props.observationIndex]);
 			console.log('DeepDiveChart: 4/4 command in file');
 		});
 
@@ -19582,13 +19426,21 @@ ${properties}`
 								const index = context.dataIndex;
 
 								// const description = featureDescriptions[index]; // Description not needed for datalabel
-								let featureValue = featureValuesSorted[index];
+								console.log(...log_if_contains_state('log', "IN DEEPDIVE featureEncodings", featureEncodings(), featureEncodings()[$$props.featureNames[index]]));
 
-								// if (featureValueNameMapping[index] !== null) {
-								//   // ... existing console logs ...
-								//   featureValue = featureValueNameMapping[index][featureValue];
-								//   formattedFeatureValue = featureValue; // Update after mapping
-								// }
+								let featureValue;
+
+								if (featureEncodings() && featureEncodings()[$$props.featureNames[index]]) {
+									// Use the mapping from featureEncodings if available
+									const encodedFeatureValue = get(singleFeatureValues)[index];
+
+									const mappedValue = featureEncodings()[$$props.featureNames[index]][encodedFeatureValue];
+
+									featureValue = mappedValue;
+								} else {
+									featureValue = get(singleFeatureValues)[index];
+								}
+
 								let diff = value[1] - value[0];
 
 								const shapLabel = diff > 0
@@ -19683,7 +19535,7 @@ ${properties}`
 			};
 
 			chart = new Chart(chartCanvas, config);
-			updateChart(get(singleShapValues), get(singleShapValues));
+			updateChart(get(singleShapValues));
 
 			// Add resize event listener
 			window.addEventListener('resize', handleResize);
@@ -19698,11 +19550,10 @@ ${properties}`
 			}
 		});
 
-		var fragment = root$1();
-		var canvas = first_child(fragment);
+		var canvas = root$1();
 
 		bind_this(canvas, ($$value) => chartCanvas = $$value, () => chartCanvas);
-		append($$anchor, fragment);
+		append($$anchor, canvas);
 
 		return pop({ ...legacy_api() });
 	}

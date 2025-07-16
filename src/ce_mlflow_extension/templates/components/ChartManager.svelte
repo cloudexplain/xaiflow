@@ -69,25 +69,6 @@
       </div>
     </div>
   </div>
-  
-  {#if selectedLabel}
-    <div class="selected-info">
-      <p><strong>Selected Feature:</strong> {selectedLabel}</p>
-    </div>
-  {/if}
-  
-  <!-- You can add more charts here that will react to the same selectedLabel -->
-  <!-- 
-  <div class="chart-section">
-    <h3>Another Chart</h3>
-    <div class="chart-container">
-      <AnotherChart 
-        data={someOtherData} 
-        bind:selectedLabel={selectedLabel} 
-      />
-    </div>
-  </div>
-  -->
 </div>
 
 <style>
