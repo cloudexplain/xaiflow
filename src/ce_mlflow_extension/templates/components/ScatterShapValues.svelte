@@ -11,7 +11,7 @@
     featureValues: number[][];
     selectedFeatureIndex: number;
     selectedFeature: string;
-    featureValueNameMapping?: { [key: string]: any }[]; // For feature value mapping
+    featureEncodings?: { [key: string]: any }[]; // For feature value mapping
     isHigherOutputBetter?: boolean; // Optional prop to determine if higher output is better
   }
 
@@ -19,7 +19,7 @@
           featureValues,
           selectedFeatureIndex,
           selectedFeature,
-          featureValueNameMapping= [],
+          featureEncodings=[{}],
           isHigherOutputBetter=false }: Props = $props();
     let chart: Chart | undefined = $state();
     let chartCanvas: HTMLCanvasElement | undefined = $state();
@@ -28,8 +28,8 @@
         shapValues,
         selectedFeatureIndex,
         selectedFeature,
-        featureValueNameMapping,
-        isHigherOutputBetter
+        featureEncodings,
+        isHigherOutputBetter,
     });
 
     $effect(() => {
@@ -37,17 +37,25 @@
             shapValues,
             selectedFeatureIndex,
             selectedFeature,
-            featureValueNameMapping,
-            isHigherOutputBetter
+            isHigherOutputBetter,
+            featureEncodings
         });
     });
 
     let dataToPlot = $derived(
         shapValues.map((row, index) => {
-            return {
-                x: featureValues[index][selectedFeatureIndex],
-                y: row[selectedFeatureIndex]
-            };
+            if (featureEncodings && featureEncodings[selectedFeature]) {
+                let mapping = featureEncodings[selectedFeature];
+                return {
+                    x: mapping[featureValues[index][selectedFeatureIndex]],
+                    y: row[selectedFeatureIndex]
+                };
+            } else {
+                return {
+                    x: featureValues[index][selectedFeatureIndex],
+                    y: row[selectedFeatureIndex]
+                };
+            }
         })
     );
     

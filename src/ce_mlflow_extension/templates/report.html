@@ -131,37 +131,11 @@
 <body>
     <div class="container">
         <h1>ML Model Analysis Report</h1>
-        
-        <!-- Traditional HTML display -->
-        <div class="section">
-            <h2>Basic Info</h2>
-            <div class="traditional-display">
-                Random Number: {{ random_number }}
-            </div>
-            <p>Generated at: {{ timestamp }}</p>
-        </div>
-
         <!-- Feature Importance Chart -->
-        <div class="section">
-            <h2>Feature Importance (Original)</h2>
-            <div id="importance-chart-container"></div>
-        </div>
-        
         <!-- New Interactive Feature Importance Chart -->
         <div class="section">
             <h2>Interactive Feature Importance</h2>
             <div id="importance-chart2-container"></div>
-        </div>
-        
-        <!-- Simple Svelte Component -->
-        <div class="section">
-            <h2>Svelte Component Test</h2>
-            <div id="simple-display-container"></div>
-        </div>
-
-        <div class="section">
-            <h2>ScatterShap</h2>
-            <div id="scatter-shap-values-container"></div>
         </div>
     </div>
 
@@ -176,59 +150,12 @@
     <!-- Initialize the Svelte components -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('Initializing Svelte components...');
-            console.log('Chart.js available:', !!window.Chart);
-            
-            // Debug: Check what's available on window
-            console.log('window.ImportanceChart2:', window.ImportanceChart2);
-            console.log('window.ScatterShapValues:', window.ScatterShapValues);
-            console.log('Available window properties:', Object.keys(window).filter(key => key.includes('Chart') || key.includes('Display')));
-            
             // Data passed from Python
             const importanceData = {{ importance_data | safe }};
             const shapValues = {{ shap_values | safe }};
             const featureValues = {{ feature_values | safe }};
             const baseValues = {{ base_values | safe }};
-            
-            console.log('Overview: Importance data:', importanceData);
-            console.log('Overview: shapValues data:', shapValues);
-            console.log('Overview: featureValues data:', featureValues);
-            console.log('Overview: baseValues data:', baseValues);
-            
-            // Initialize ImportanceChart
-            if (window.ImportanceChart && importanceData) {
-                try {
-                    new window.ImportanceChart({
-                        target: document.getElementById('importance-chart-container'),
-                        props: {
-                            importanceValues: importanceData.values,
-                            featureNames: importanceData.features,
-                            title: "Feature Importance Analysis"
-                        }
-                    });
-                    console.log('ImportanceChart mounted successfully!');
-                } catch (error) {
-                    console.error('Error mounting ImportanceChart:', error);
-                }
-            } else {
-                console.error('ImportanceChart component not found or no data provided');
-                console.log('window.ImportanceChart exists:', !!window.ImportanceChart);
-                console.log('importanceData exists:', !!importanceData);
-            }
-            
-            // Initialize SimpleDisplay component
-            if (window.SimpleDisplay) {
-                    new window.SimpleDisplay({
-                        target: document.getElementById('simple-display-container'),
-                        props: {
-                            randomNumber: {{ random_number }},
-                            title: "Svelte Display"
-                        }
-                    });
-                    console.log('SimpleDisplay component mounted successfully!');
-            } else {
-                console.error('SimpleDisplay component not found');
-            }
+            const featureEncodings = {{ feature_encodings | safe }};
             
             // Initialize ImportanceChart2 with ChartManager for reactive state
             if (window.ChartManager && importanceData) {
@@ -239,8 +166,6 @@
                         importance: importanceData.values[index]
                     }));
                     
-                    console.log('Chart data for ImportanceChart2:', chartData);
-                    
                     new window.ChartManager({
                         target: document.getElementById('importance-chart2-container'),
                         props: {
@@ -248,6 +173,7 @@
                             shapValues: shapValues,
                             featureValues: featureValues,
                             baseValues: baseValues,
+                            featureEncodings: featureEncodings
                         }
                     });
                     console.log('ChartManager with ImportanceChart2 mounted successfully!');
@@ -259,24 +185,6 @@
                 console.log('window.ChartManager exists:', !!window.ChartManager);
                 console.log('importanceData exists:', !!importanceData);
             }
-
-            // if (window.ScatterShapValues && shapValues) {
-            //     console.log('Initializing ScatterShapValues with data:', shapValues);
-            //     new window.ScatterShapValues({
-            //         target: document.getElementById('scatter-shap-values-container'),
-            //         props: {
-            //             shapValues: shapValues,
-            //             selectedFeature: 'feature1', // Example feature
-            //             selectedFeatureIndex: 0, // Example index
-            //             isHigherOutputBetter: true
-            //         }
-            //     });
-            //     console.log('ScatterShapValues component mounted successfully!');
-            // } else {
-            //     console.error('ScatterShapValues component not found or no data provided');
-            //     console.log('window.ScatterShapValues exists:', !!window.ScatterShapValues);
-            //     console.log('shapValues exists:', !!shapValues);
-            // }
         });
     </script>
 </body>

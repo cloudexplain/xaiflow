@@ -28,6 +28,7 @@ class CEMLflowPlugin:
         self,
         feature_names: List[str],
         shap_values: List[List[float]] | np.ndarray | Explanation,
+        feature_encodings: Optional[Dict[str, Dict[int, str]]] = None,
         importance_values: List[float] | np.ndarray = None,
         run_id: Optional[str] = None,
         artifact_path: str = "reports",
@@ -75,18 +76,6 @@ class CEMLflowPlugin:
             "values": normalized_importance
         }
         
-        # Generate default SHAP values if not provided
-        if shap_values is None:
-            # Create dummy SHAP values for demonstration
-            n_samples = 100
-            shap_values = []
-            for _ in range(n_samples):
-                sample_shap = [
-                    np.random.normal(0, abs(imp_val) * 0.1) 
-                    for imp_val in normalized_importance
-                ]
-                shap_values.append(sample_shap)
-        
         # Create temporary file for the HTML report (with inlined JS)
         with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as tmp_file:
             temp_path = tmp_file.name
@@ -99,6 +88,7 @@ class CEMLflowPlugin:
                 shap_values=shap_values,
                 feature_values=feature_values,
                 base_values=base_values,
+                feature_encodings=feature_encodings
             )
             
             # Log the report as an MLflow artifact
@@ -227,6 +217,7 @@ class CEMLflowPlugin:
         shap_values: List[List[float]],
         feature_values: List[float] = None,
         base_values: List[float] = None,
+        feature_encodings: Optional[Dict[str, Dict[int, str]]] = None
     ):
         """
         Generate a custom HTML report with the provided data, inlining the bundle.js
@@ -286,6 +277,7 @@ class CEMLflowPlugin:
                 "shap_values": shap_values,  # Now Python list
                 "feature_values": feature_values,  # Now Python list or None
                 "base_values": base_values,  # Now Python list or None
+                "feature_encodings": feature_encodings  # Optional encodings
             }
             json.dump(data_to_save, f, indent=2)
             print(f"Saved report data to test_report_data.json")
@@ -298,6 +290,7 @@ class CEMLflowPlugin:
             shap_values=shap_values,  # Pass as Python list
             feature_values=feature_values,  # Pass as Python list or None
             base_values=base_values,  # Pass as Python list or None
+            feature_encodings=feature_encodings,  # Pass as optional dict
             bundle_js_content=bundle_js_content  # Pass the bundle content
         )
         

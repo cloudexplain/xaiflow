@@ -7,9 +7,10 @@
     importanceData: { feature_name: string; importance: number }[];
     shapValues: number[][];
     featureValues: number[][];
+    featureEncodings?: { [key: string]: any }[]; // For feature value mapping
   }
   
-  let { importanceData, shapValues, featureValues }: Props = $props();
+  let { importanceData, shapValues, featureValues, featureEncodings = {} }: Props = $props();
   
   // Reactive state for selected label using $state
   let selectedLabel: string | null = $state(null);
@@ -56,9 +57,10 @@
           shapValues={shapValues} 
           featureValues={featureValues}
           bind:selectedFeatureIndex={selectedFeatureIndex} 
-          selectedFeature="Feature Name" 
+          selectedFeature={selectedLabel}
           bind:selectedLabel={selectedLabel}
           isHigherOutputBetter={true} 
+          featureEncodings={featureEncodings}
         />
       </div>
     </div>

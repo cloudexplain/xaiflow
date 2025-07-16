@@ -16190,7 +16190,7 @@ ${properties}`
 
 	ScatterShapValues[FILENAME] = 'src/ce_mlflow_extension/templates/components/ScatterShapValues.svelte';
 
-	var root$3 = add_locations(from_html(`<div class="scatter-shap-container"><canvas class="svelte-ec5xpb"></canvas></div>`), ScatterShapValues[FILENAME], [[235, 0, [[236, 2]]]]);
+	var root$3 = add_locations(from_html(`<div class="scatter-shap-container"><canvas class="svelte-ec5xpb"></canvas></div>`), ScatterShapValues[FILENAME], [[243, 0, [[244, 2]]]]);
 
 	function ScatterShapValues($$anchor, $$props) {
 		check_target(new.target);
@@ -16199,7 +16199,7 @@ ${properties}`
 		// import { colorMap } from '../utils/colormap';
 		// For feature value mapping
 		// Optional prop to determine if higher output is better
-		let featureValueNameMapping = prop($$props, 'featureValueNameMapping', 19, () => []),
+		let featureEncodings = prop($$props, 'featureEncodings', 19, () => [{}]),
 			isHigherOutputBetter = prop($$props, 'isHigherOutputBetter', 3, false);
 
 		let chart = tag(state(void 0), 'chart');
@@ -16209,7 +16209,7 @@ ${properties}`
 			shapValues: $$props.shapValues,
 			selectedFeatureIndex: $$props.selectedFeatureIndex,
 			selectedFeature: $$props.selectedFeature,
-			featureValueNameMapping: featureValueNameMapping(),
+			featureEncodings: featureEncodings(),
 			isHigherOutputBetter: isHigherOutputBetter()
 		}));
 
@@ -16218,17 +16218,26 @@ ${properties}`
 				shapValues: $$props.shapValues,
 				selectedFeatureIndex: $$props.selectedFeatureIndex,
 				selectedFeature: $$props.selectedFeature,
-				featureValueNameMapping: featureValueNameMapping(),
-				isHigherOutputBetter: isHigherOutputBetter()
+				isHigherOutputBetter: isHigherOutputBetter(),
+				featureEncodings: featureEncodings()
 			}));
 		});
 
 		let dataToPlot = tag(
 			user_derived(() => $$props.shapValues.map((row, index) => {
-				return {
-					x: $$props.featureValues[index][$$props.selectedFeatureIndex],
-					y: row[$$props.selectedFeatureIndex]
-				};
+				if (featureEncodings() && featureEncodings()[$$props.selectedFeature]) {
+					let mapping = featureEncodings()[$$props.selectedFeature];
+
+					return {
+						x: mapping[$$props.featureValues[index][$$props.selectedFeatureIndex]],
+						y: row[$$props.selectedFeatureIndex]
+					};
+				} else {
+					return {
+						x: $$props.featureValues[index][$$props.selectedFeatureIndex],
+						y: row[$$props.selectedFeatureIndex]
+					};
+				}
 			})),
 			'dataToPlot'
 		);
@@ -16424,18 +16433,18 @@ ${properties}`
 
 	ChartManager[FILENAME] = 'src/ce_mlflow_extension/templates/components/ChartManager.svelte';
 
-	var root_1 = add_locations(from_html(`<div class="selected-info svelte-169j5gc"><p class="svelte-169j5gc"><strong>Selected Feature:</strong> </p></div>`), ChartManager[FILENAME], [[68, 4, [[69, 6, [[69, 9]]]]]]);
+	var root_1 = add_locations(from_html(`<div class="selected-info svelte-169j5gc"><p class="svelte-169j5gc"><strong>Selected Feature:</strong> </p></div>`), ChartManager[FILENAME], [[70, 4, [[71, 6, [[71, 9]]]]]]);
 
 	var root$2 = add_locations(from_html(`<div class="chart-manager svelte-169j5gc"><div class="charts-row svelte-169j5gc"><div class="chart-section svelte-169j5gc"><h3 class="svelte-169j5gc">Feature Importance Chart</h3> <div class="chart-container svelte-169j5gc"><!></div></div> <div class="chart-section svelte-169j5gc"><h3 class="svelte-169j5gc">SHAP Values</h3> <div class="chart-container svelte-169j5gc"><!></div></div></div> <!></div>`), ChartManager[FILENAME], [
 		[
-			39,
+			40,
 			0,
 
 			[
 				[
-					40,
+					41,
 					2,
-					[[41, 4, [[42, 6], [43, 6]]], [52, 4, [[53, 6], [54, 6]]]]
+					[[42, 4, [[43, 6], [44, 6]]], [53, 4, [[54, 6], [55, 6]]]]
 				]
 			]
 		]
@@ -16446,6 +16455,9 @@ ${properties}`
 		push($$props, true, ChartManager);
 
 		// Props using Svelte 5 runes
+		// For feature value mapping
+		let featureEncodings = prop($$props, 'featureEncodings', 19, () => ({}));
+
 		// Reactive state for selected label using $state
 		let selectedLabel = tag(state(null), 'selectedLabel');
 
@@ -16494,7 +16506,7 @@ ${properties}`
 			}),
 			'component',
 			ChartManager,
-			44,
+			45,
 			8,
 			{ componentTag: 'ImportanceChart2' }
 		);
@@ -16513,8 +16525,15 @@ ${properties}`
 					return $$props.featureValues;
 				},
 
-				selectedFeature: 'Feature Name',
+				get selectedFeature() {
+					return get(selectedLabel);
+				},
+
 				isHigherOutputBetter: true,
+
+				get featureEncodings() {
+					return featureEncodings();
+				},
 
 				get selectedFeatureIndex() {
 					return get(selectedFeatureIndex);
@@ -16534,7 +16553,7 @@ ${properties}`
 			}),
 			'component',
 			ChartManager,
-			55,
+			56,
 			8,
 			{ componentTag: 'ScatterShapValues' }
 		);
@@ -16556,7 +16575,7 @@ ${properties}`
 				}),
 				'if',
 				ChartManager,
-				67,
+				69,
 				2
 			);
 		}
@@ -16772,35 +16791,27 @@ ${properties}`
 	      sampleShapValues = testReportData.shap_values || [];
 	      sampleFeatureValues = testReportData.feature_values || [];
 	      sampleBaseValues = testReportData.base_values || [];
+	      sampleFeatureEncodings = testReportData.feature_encodings || {};
 	      
 	      console.log('Parsed data:');
 	      console.log('- Importance data:', sampleImportanceData);
 	      console.log('- SHAP values (sample):', sampleShapValues.slice(0, 3));
 	      console.log('- Feature values (sample):', sampleFeatureValues.slice(0, 3));
 	      console.log('- Base values (sample):', sampleBaseValues.slice(0, 3));
+	      console.log('- Feature encodings:', sampleFeatureEncodings);
 	    } else {
 	      throw new Error(`Failed to load test data: ${response.status}`);
 	    }
 	  } catch (error) {
 	    console.warn('Could not load test_report_data.json, using fallback data:', error);
-	    
-	    // Fallback to hardcoded sample data
-	    sampleImportanceData = [
-	      { feature_name: "age", importance: 0.25 },
-	      { feature_name: "income", importance: 0.20 },
-	      { feature_name: "education_years", importance: 0.15 },
-	      { feature_name: "credit_score", importance: 0.15 },
-	      { feature_name: "debt_ratio", importance: 0.10 },
-	      { feature_name: "employment_years", importance: 0.10 },
-	      { feature_name: "property_value", importance: 0.05 }
-	    ];
 	  }
 
 	  return {
 	    sampleImportanceData,
 	    sampleShapValues,
 	    sampleFeatureValues,
-	    sampleBaseValues
+	    sampleBaseValues,
+	    sampleFeatureEncodings
 	  };
 	}
 

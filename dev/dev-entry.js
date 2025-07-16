@@ -47,35 +47,27 @@ async function loadTestData() {
       sampleShapValues = testReportData.shap_values || [];
       sampleFeatureValues = testReportData.feature_values || [];
       sampleBaseValues = testReportData.base_values || [];
+      sampleFeatureEncodings = testReportData.feature_encodings || {};
       
       console.log('Parsed data:');
       console.log('- Importance data:', sampleImportanceData);
       console.log('- SHAP values (sample):', sampleShapValues.slice(0, 3));
       console.log('- Feature values (sample):', sampleFeatureValues.slice(0, 3));
       console.log('- Base values (sample):', sampleBaseValues.slice(0, 3));
+      console.log('- Feature encodings:', sampleFeatureEncodings);
     } else {
       throw new Error(`Failed to load test data: ${response.status}`);
     }
   } catch (error) {
     console.warn('Could not load test_report_data.json, using fallback data:', error);
-    
-    // Fallback to hardcoded sample data
-    sampleImportanceData = [
-      { feature_name: "age", importance: 0.25 },
-      { feature_name: "income", importance: 0.20 },
-      { feature_name: "education_years", importance: 0.15 },
-      { feature_name: "credit_score", importance: 0.15 },
-      { feature_name: "debt_ratio", importance: 0.10 },
-      { feature_name: "employment_years", importance: 0.10 },
-      { feature_name: "property_value", importance: 0.05 }
-    ];
   }
 
   return {
     sampleImportanceData,
     sampleShapValues,
     sampleFeatureValues,
-    sampleBaseValues
+    sampleBaseValues,
+    sampleFeatureEncodings
   };
 }
 
