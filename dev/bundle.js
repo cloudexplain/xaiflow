@@ -16424,18 +16424,20 @@ ${properties}`
 
 	ChartManager[FILENAME] = 'src/ce_mlflow_extension/templates/components/ChartManager.svelte';
 
-	var root_1 = add_locations(from_html(`<div class="selected-info svelte-1m7zl40"><p class="svelte-1m7zl40"><strong>Selected Feature:</strong> </p></div>`), ChartManager[FILENAME], [[68, 4, [[69, 6, [[69, 9]]]]]]);
+	var root_1 = add_locations(from_html(`<div class="selected-info svelte-169j5gc"><p class="svelte-169j5gc"><strong>Selected Feature:</strong> </p></div>`), ChartManager[FILENAME], [[85, 4, [[86, 6, [[86, 9]]]]]]);
 
-	var root$2 = add_locations(from_html(`<div class="chart-manager svelte-1m7zl40"><div class="charts-row svelte-1m7zl40"><div class="chart-section svelte-1m7zl40"><h3 class="svelte-1m7zl40">Feature Importance Chart</h3> <div class="chart-container svelte-1m7zl40"><!></div></div> <div class="chart-section svelte-1m7zl40"><h3 class="svelte-1m7zl40">SHAP Values</h3> <div class="chart-container svelte-1m7zl40"><!></div></div></div> <!></div>`), ChartManager[FILENAME], [
+	var root$2 = add_locations(from_html(`<div class="chart-manager svelte-169j5gc"><div style="background: #f0f0f0; padding: 10px; margin-bottom: 20px; border-radius: 4px;"><h4 style="margin: 0 0 10px 0; color: #666;">Debug Info:</h4> <p style="margin: 5px 0; font-size: 12px;"> </p> <p style="margin: 5px 0; font-size: 12px;"> </p> <p style="margin: 5px 0; font-size: 12px;"> </p> <p style="margin: 5px 0; font-size: 12px;"> </p></div> <div class="charts-row svelte-169j5gc"><div class="chart-section svelte-169j5gc"><h3 class="svelte-169j5gc">Feature Importance Chart</h3> <div class="chart-container svelte-169j5gc"><!></div></div> <div class="chart-section svelte-169j5gc"><h3 class="svelte-169j5gc">SHAP Values</h3> <div class="chart-container svelte-169j5gc"><!></div></div></div> <!></div>`), ChartManager[FILENAME], [
 		[
 			39,
 			0,
 
 			[
+				[41, 2, [[42, 4], [43, 4], [46, 4], [49, 4], [52, 4]]],
+
 				[
-					40,
+					57,
 					2,
-					[[41, 4, [[42, 6], [43, 6]]], [52, 4, [[53, 6], [54, 6]]]]
+					[[58, 4, [[59, 6], [60, 6]]], [69, 4, [[70, 6], [71, 6]]]]
 				]
 			]
 		]
@@ -16472,9 +16474,22 @@ ${properties}`
 
 		var div = root$2();
 		var div_1 = child(div);
-		var div_2 = child(div_1);
-		var div_3 = sibling(child(div_2), 2);
-		var node = child(div_3);
+		var p = sibling(child(div_1), 2);
+		var text = child(p);
+
+		var p_1 = sibling(p, 2);
+		var text_1 = child(p_1);
+
+		var p_2 = sibling(p_1, 2);
+		var text_2 = child(p_2);
+
+		var p_3 = sibling(p_2, 2);
+		var text_3 = child(p_3);
+
+		var div_2 = sibling(div_1, 2);
+		var div_3 = child(div_2);
+		var div_4 = sibling(child(div_3), 2);
+		var node = child(div_4);
 
 		add_svelte_meta(
 			() => ImportanceChart2(node, {
@@ -16494,14 +16509,14 @@ ${properties}`
 			}),
 			'component',
 			ChartManager,
-			44,
+			61,
 			8,
 			{ componentTag: 'ImportanceChart2' }
 		);
 
-		var div_4 = sibling(div_2, 2);
-		var div_5 = sibling(child(div_4), 2);
-		var node_1 = child(div_5);
+		var div_5 = sibling(div_3, 2);
+		var div_6 = sibling(child(div_5), 2);
+		var node_1 = child(div_6);
 
 		add_svelte_meta(
 			() => ScatterShapValues(node_1, {
@@ -16534,20 +16549,20 @@ ${properties}`
 			}),
 			'component',
 			ChartManager,
-			55,
+			72,
 			8,
 			{ componentTag: 'ScatterShapValues' }
 		);
 
-		var node_2 = sibling(div_1, 2);
+		var node_2 = sibling(div_2, 2);
 
 		{
 			var consequent = ($$anchor) => {
-				var div_6 = root_1();
-				var p = child(div_6);
-				var text = sibling(child(p));
-				template_effect(() => set_text(text, ` ${get(selectedLabel) ?? ''}`));
-				append($$anchor, div_6);
+				var div_7 = root_1();
+				var p_4 = child(div_7);
+				var text_4 = sibling(child(p_4));
+				template_effect(() => set_text(text_4, ` ${get(selectedLabel) ?? ''}`));
+				append($$anchor, div_7);
 			};
 
 			add_svelte_meta(
@@ -16556,10 +16571,18 @@ ${properties}`
 				}),
 				'if',
 				ChartManager,
-				67,
+				84,
 				2
 			);
 		}
+
+		template_effect(() => {
+			set_text(text, `ImportanceData length: ${($$props.importanceData?.length || 0) ?? ''}`);
+			set_text(text_1, `ShapValues length: ${($$props.shapValues?.length || 0) ?? ''}`);
+			set_text(text_2, `FeatureValues length: ${($$props.featureValues?.length || 0) ?? ''}`);
+			set_text(text_3, `Selected Label: ${(get(selectedLabel) || 'None')}`);
+		});
+
 		append($$anchor, div);
 
 		return pop({ ...legacy_api() });

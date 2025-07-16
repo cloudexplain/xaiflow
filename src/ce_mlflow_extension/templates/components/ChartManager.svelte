@@ -37,6 +37,23 @@
 </script>
 
 <div class="chart-manager">
+  <!-- Debug information -->
+  <div style="background: #f0f0f0; padding: 10px; margin-bottom: 20px; border-radius: 4px;">
+    <h4 style="margin: 0 0 10px 0; color: #666;">Debug Info:</h4>
+    <p style="margin: 5px 0; font-size: 12px;">
+      ImportanceData length: {importanceData?.length || 0}
+    </p>
+    <p style="margin: 5px 0; font-size: 12px;">
+      ShapValues length: {shapValues?.length || 0}
+    </p>
+    <p style="margin: 5px 0; font-size: 12px;">
+      FeatureValues length: {featureValues?.length || 0}
+    </p>
+    <p style="margin: 5px 0; font-size: 12px;">
+      Selected Label: {selectedLabel || 'None'}
+    </p>
+  </div>
+
   <div class="charts-row">
     <div class="chart-section">
       <h3>Feature Importance Chart</h3>
@@ -91,21 +108,25 @@
   
   .charts-row {
     display: flex;
+    flex-direction: row;
     gap: 20px;
     margin-bottom: 30px;
     width: 100%;
+    align-items: stretch;
   }
   
   .chart-section {
     flex: 1;
     min-width: 0; /* Allows flex items to shrink below their natural width */
     width: 50%;
+    max-width: 50%;
   }
   
   .chart-section h3 {
     margin-bottom: 15px;
-    color: #333;
+    color: #ff0000; /* Changed to red to test props propagation */
     text-align: center;
+    font-weight: bold;
   }
   
   .chart-container {
