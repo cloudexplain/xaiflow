@@ -11,15 +11,6 @@
   }
   
   let { data = [], selectedLabel = $bindable(null) }: Props = $props();
-  console.log("ImportanceChart2: Loaded with data:", data, "and selectedLabel:", selectedLabel);
-  
-  // Debug the derived values
-  $effect(() => {
-    console.log("ImportanceChart2: orderedData:", orderedData);
-    console.log("ImportanceChart2: totalImportance:", totalImportance);
-    console.log("ImportanceChart2: percentageData:", percentageData);
-    console.log("ImportanceChart2: displayData:", displayData);
-  });
 
   // Event dispatcher
   const dispatch = createEventDispatcher<{

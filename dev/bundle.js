@@ -340,10 +340,16 @@
 		}
 	}
 
+	const EACH_ITEM_REACTIVE = 1;
+	const EACH_INDEX_REACTIVE = 1 << 1;
+	const EACH_ITEM_IMMUTABLE = 1 << 4;
+
 	const PROPS_IS_IMMUTABLE = 1;
 	const PROPS_IS_UPDATED = 1 << 2;
 	const PROPS_IS_BINDABLE = 1 << 3;
 	const PROPS_IS_LAZY_INITIAL = 1 << 4;
+
+	const TEMPLATE_FRAGMENT = 1;
 	const TEMPLATE_USE_IMPORT_NODE = 1 << 1;
 
 	const UNINITIALIZED = Symbol();
@@ -394,6 +400,17 @@
 	}
 
 	/**
+	 * The `value` property of a `<select multiple>` element should be an array, but it received a non-array value. The selection will be kept as is.
+	 */
+	function select_multiple_invalid_value() {
+		if (DEV) {
+			console.warn(`%c[svelte] select_multiple_invalid_value\n%cThe \`value\` property of a \`<select multiple>\` element should be an array, but it received a non-array value. The selection will be kept as is.\nhttps://svelte.dev/e/select_multiple_invalid_value`, bold$1, normal$1);
+		} else {
+			console.warn(`https://svelte.dev/e/select_multiple_invalid_value`);
+		}
+	}
+
+	/**
 	 * Reactive `$state(...)` proxies and the values they proxy have different identities. Because of this, comparisons with `%operator%` will produce unexpected results
 	 * @param {string} operator
 	 */
@@ -405,10 +422,24 @@
 		}
 	}
 
+	/** @import { TemplateNode } from '#client' */
+
+
+	/**
+	 * Use this variable to guard everything related to hydration code so it can be treeshaken out
+	 * if the user doesn't use the `hydrate` method and these code paths are therefore not needed.
+	 */
+	let hydrating = false;
+
+	/** @param {TemplateNode} node */
+	function reset(node) {
+		return;
+	}
+
 	/** @import { Equals } from '#client' */
 
 	/** @type {Equals} */
-	function equals(value) {
+	function equals$1(value) {
 		return value === this.v;
 	}
 
@@ -955,7 +986,7 @@ ${properties}`
 			ctx: component_context,
 			deps: null,
 			effects: null,
-			equals,
+			equals: equals$1,
 			f: flags,
 			fn,
 			reactions: null,
@@ -1820,7 +1851,7 @@ ${properties}`
 			f: 0, // TODO ideally we could skip this altogether, but it causes type errors
 			v,
 			reactions: null,
-			equals,
+			equals: equals$1,
 			rv: 0,
 			wv: 0
 		};
@@ -1838,6 +1869,22 @@ ${properties}`
 		const s = source(v);
 
 		push_reaction_value(s);
+
+		return s;
+	}
+
+	/**
+	 * @template V
+	 * @param {V} initial_value
+	 * @param {boolean} [immutable]
+	 * @returns {Source<V>}
+	 */
+	/*#__NO_SIDE_EFFECTS__*/
+	function mutable_source(initial_value, immutable = false, trackable = true) {
+		const s = source(initial_value);
+		if (!immutable) {
+			s.equals = safe_equals;
+		}
 
 		return s;
 	}
@@ -2345,6 +2392,14 @@ ${properties}`
 		return value;
 	}
 
+	/**
+	 * @param {any} a
+	 * @param {any} b
+	 */
+	function is(a, b) {
+		return Object.is(get_proxied_value(a), get_proxied_value(b));
+	}
+
 	function init_array_prototype_warnings() {
 		const array_prototype = Array.prototype;
 		// The REPL ends up here over and over, and this prevents it from adding more and more patches
@@ -2428,6 +2483,20 @@ ${properties}`
 		} catch {}
 
 		return (a === b) === equal;
+	}
+
+	/**
+	 * @param {any} a
+	 * @param {any} b
+	 * @param {boolean} equal
+	 * @returns {boolean}
+	 */
+	function equals(a, b, equal = true) {
+		if ((a == b) !== (get_proxied_value(a) == get_proxied_value(b))) {
+			state_proxy_equality_mismatch(equal ? '==' : '!=');
+		}
+
+		return (a == b) === equal;
 	}
 
 	/** @import { Effect, TemplateNode } from '#client' */
@@ -2535,6 +2604,24 @@ ${properties}`
 
 	/**
 	 * Don't mark this as side-effect-free, hydration needs to walk all nodes
+	 * @param {DocumentFragment | TemplateNode[]} fragment
+	 * @param {boolean} is_text
+	 * @returns {Node | null}
+	 */
+	function first_child(fragment, is_text) {
+		{
+			// when not hydrating, `fragment` is a `DocumentFragment` (the result of calling `open_frag`)
+			var first = /** @type {DocumentFragment} */ (get_first_child(/** @type {Node} */ (fragment)));
+
+			// TODO prevent user comments with the empty string when preserveComments is true
+			if (first instanceof Comment && first.data === '') return get_next_sibling(first);
+
+			return first;
+		}
+	}
+
+	/**
+	 * Don't mark this as side-effect-free, hydration needs to walk all nodes
 	 * @param {TemplateNode} node
 	 * @param {number} count
 	 * @param {boolean} is_text
@@ -2550,6 +2637,15 @@ ${properties}`
 		{
 			return next_sibling;
 		}
+	}
+
+	/**
+	 * @template {Node} N
+	 * @param {N} node
+	 * @returns {void}
+	 */
+	function clear_text_content(node) {
+		node.textContent = '';
 	}
 
 	/**
@@ -2675,6 +2771,16 @@ ${properties}`
 			}
 		}
 
+		return effect;
+	}
+
+	/**
+	 * @param {() => void} fn
+	 */
+	function teardown(fn) {
+		const effect = create_effect(RENDER_EFFECT, null, false);
+		set_signal_status(effect, CLEAN);
+		effect.teardown = fn;
 		return effect;
 	}
 
@@ -3763,11 +3869,148 @@ ${properties}`
 		}
 	}
 
+	let listening_to_form_reset = false;
+
+	function add_form_reset_listener() {
+		if (!listening_to_form_reset) {
+			listening_to_form_reset = true;
+			document.addEventListener(
+				'reset',
+				(evt) => {
+					// Needs to happen one tick later or else the dom properties of the form
+					// elements have not updated to their reset values yet
+					Promise.resolve().then(() => {
+						if (!evt.defaultPrevented) {
+							for (const e of /**@type {HTMLFormElement} */ (evt.target).elements) {
+								// @ts-expect-error
+								e.__on_r?.();
+							}
+						}
+					});
+				},
+				// In the capture phase to guarantee we get noticed of it (no possiblity of stopPropagation)
+				{ capture: true }
+			);
+		}
+	}
+
+	/**
+	 * @template T
+	 * @param {() => T} fn
+	 */
+	function without_reactive_context(fn) {
+		var previous_reaction = active_reaction;
+		var previous_effect = active_effect;
+		set_active_reaction(null);
+		set_active_effect(null);
+		try {
+			return fn();
+		} finally {
+			set_active_reaction(previous_reaction);
+			set_active_effect(previous_effect);
+		}
+	}
+
+	/**
+	 * Listen to the given event, and then instantiate a global form reset listener if not already done,
+	 * to notify all bindings when the form is reset
+	 * @param {HTMLElement} element
+	 * @param {string} event
+	 * @param {(is_reset?: true) => void} handler
+	 * @param {(is_reset?: true) => void} [on_reset]
+	 */
+	function listen_to_event_and_reset_event(element, event, handler, on_reset = handler) {
+		element.addEventListener(event, () => without_reactive_context(handler));
+		// @ts-expect-error
+		const prev = element.__on_r;
+		if (prev) {
+			// special case for checkbox that can have multiple binds (group & checked)
+			// @ts-expect-error
+			element.__on_r = () => {
+				prev();
+				on_reset(true);
+			};
+		} else {
+			// @ts-expect-error
+			element.__on_r = () => on_reset(true);
+		}
+
+		add_form_reset_listener();
+	}
+
 	/** @type {Set<string>} */
 	const all_registered_events = new Set();
 
 	/** @type {Set<(events: Array<string>) => void>} */
 	const root_event_handles = new Set();
+
+	/**
+	 * @param {string} event_name
+	 * @param {EventTarget} dom
+	 * @param {EventListener} [handler]
+	 * @param {AddEventListenerOptions} [options]
+	 */
+	function create_event(event_name, dom, handler, options = {}) {
+		/**
+		 * @this {EventTarget}
+		 */
+		function target_handler(/** @type {Event} */ event) {
+			if (!options.capture) {
+				// Only call in the bubble phase, else delegated events would be called before the capturing events
+				handle_event_propagation.call(dom, event);
+			}
+			if (!event.cancelBubble) {
+				return without_reactive_context(() => {
+					return handler?.call(this, event);
+				});
+			}
+		}
+
+		// Chrome has a bug where pointer events don't work when attached to a DOM element that has been cloned
+		// with cloneNode() and the DOM element is disconnected from the document. To ensure the event works, we
+		// defer the attachment till after it's been appended to the document. TODO: remove this once Chrome fixes
+		// this bug. The same applies to wheel events and touch events.
+		if (
+			event_name.startsWith('pointer') ||
+			event_name.startsWith('touch') ||
+			event_name === 'wheel'
+		) {
+			queue_micro_task(() => {
+				dom.addEventListener(event_name, target_handler, options);
+			});
+		} else {
+			dom.addEventListener(event_name, target_handler, options);
+		}
+
+		return target_handler;
+	}
+
+	/**
+	 * @param {string} event_name
+	 * @param {Element} dom
+	 * @param {EventListener} [handler]
+	 * @param {boolean} [capture]
+	 * @param {boolean} [passive]
+	 * @returns {void}
+	 */
+	function event(event_name, dom, handler, capture, passive) {
+		var options = { capture, passive };
+		var target_handler = create_event(event_name, dom, handler, options);
+
+		if (
+			dom === document.body ||
+			// @ts-ignore
+			dom === window ||
+			// @ts-ignore
+			dom === document ||
+			// Firefox has quirky behavior, it can happen that we still get "canplay" events when the element is already removed
+			dom instanceof HTMLMediaElement
+		) {
+			teardown(() => {
+				dom.removeEventListener(event_name, target_handler, options);
+			});
+		}
+	}
 
 	/**
 	 * @this {EventTarget}
@@ -3942,6 +4185,7 @@ ${properties}`
 	 */
 	/*#__NO_SIDE_EFFECTS__*/
 	function from_html(content, flags) {
+		var is_fragment = (flags & TEMPLATE_FRAGMENT) !== 0;
 		var use_import_node = (flags & TEMPLATE_USE_IMPORT_NODE) !== 0;
 
 		/** @type {Node} */
@@ -3957,14 +4201,19 @@ ${properties}`
 
 			if (node === undefined) {
 				node = create_fragment_from_html(has_start ? content : '<!>' + content);
-				node = /** @type {Node} */ (get_first_child(node));
+				if (!is_fragment) node = /** @type {Node} */ (get_first_child(node));
 			}
 
 			var clone = /** @type {TemplateNode} */ (
 				use_import_node || is_firefox ? document.importNode(node, true) : node.cloneNode(true)
 			);
 
-			{
+			if (is_fragment) {
+				var start = /** @type {TemplateNode} */ (get_first_child(clone));
+				var end = /** @type {TemplateNode} */ (clone.lastChild);
+
+				assign_nodes(start, end);
+			} else {
 				assign_nodes(clone, clone);
 			}
 
@@ -4251,6 +4500,691 @@ ${properties}`
 				update_branch(null, null);
 			}
 		}, flags);
+	}
+
+	/** @import { EachItem, EachState, Effect, MaybeSource, Source, TemplateNode, TransitionManager, Value } from '#client' */
+	/** @import { Batch } from '../../reactivity/batch.js'; */
+
+	/**
+	 * @param {any} _
+	 * @param {number} i
+	 */
+	function index(_, i) {
+		return i;
+	}
+
+	/**
+	 * Pause multiple effects simultaneously, and coordinate their
+	 * subsequent destruction. Used in each blocks
+	 * @param {EachState} state
+	 * @param {EachItem[]} items
+	 * @param {null | Node} controlled_anchor
+	 */
+	function pause_effects(state, items, controlled_anchor) {
+		var items_map = state.items;
+
+		/** @type {TransitionManager[]} */
+		var transitions = [];
+		var length = items.length;
+
+		for (var i = 0; i < length; i++) {
+			pause_children(items[i].e, transitions, true);
+		}
+
+		var is_controlled = length > 0 && transitions.length === 0 && controlled_anchor !== null;
+		// If we have a controlled anchor, it means that the each block is inside a single
+		// DOM element, so we can apply a fast-path for clearing the contents of the element.
+		if (is_controlled) {
+			var parent_node = /** @type {Element} */ (
+				/** @type {Element} */ (controlled_anchor).parentNode
+			);
+			clear_text_content(parent_node);
+			parent_node.append(/** @type {Element} */ (controlled_anchor));
+			items_map.clear();
+			link(state, items[0].prev, items[length - 1].next);
+		}
+
+		run_out_transitions(transitions, () => {
+			for (var i = 0; i < length; i++) {
+				var item = items[i];
+				if (!is_controlled) {
+					items_map.delete(item.k);
+					link(state, item.prev, item.next);
+				}
+				destroy_effect(item.e, !is_controlled);
+			}
+		});
+	}
+
+	/**
+	 * @template V
+	 * @param {Element | Comment} node The next sibling node, or the parent node if this is a 'controlled' block
+	 * @param {number} flags
+	 * @param {() => V[]} get_collection
+	 * @param {(value: V, index: number) => any} get_key
+	 * @param {(anchor: Node, item: MaybeSource<V>, index: MaybeSource<number>) => void} render_fn
+	 * @param {null | ((anchor: Node) => void)} fallback_fn
+	 * @returns {void}
+	 */
+	function each$1(node, flags, get_collection, get_key, render_fn, fallback_fn = null) {
+		var anchor = node;
+
+		/** @type {EachState} */
+		var state = { flags, items: new Map(), first: null };
+
+		{
+			var parent_node = /** @type {Element} */ (node);
+
+			anchor = parent_node.appendChild(create_text());
+		}
+
+		/** @type {Effect | null} */
+		var fallback = null;
+
+		var was_empty = false;
+
+		/** @type {Map<any, EachItem>} */
+		var offscreen_items = new Map();
+
+		// TODO: ideally we could use derived for runes mode but because of the ability
+		// to use a store which can be mutated, we can't do that here as mutating a store
+		// will still result in the collection array being the same from the store
+		var each_array = derived_safe_equal(() => {
+			var collection = get_collection();
+
+			return is_array(collection) ? collection : collection == null ? [] : array_from(collection);
+		});
+
+		/** @type {V[]} */
+		var array;
+
+		/** @type {Effect} */
+		var each_effect;
+
+		function commit() {
+			reconcile(
+				each_effect,
+				array,
+				state,
+				offscreen_items,
+				anchor,
+				render_fn,
+				flags,
+				get_key,
+				get_collection
+			);
+
+			if (fallback_fn !== null) {
+				if (array.length === 0) {
+					if (fallback) {
+						resume_effect(fallback);
+					} else {
+						fallback = branch(() => fallback_fn(anchor));
+					}
+				} else if (fallback !== null) {
+					pause_effect(fallback, () => {
+						fallback = null;
+					});
+				}
+			}
+		}
+
+		block(() => {
+			// store a reference to the effect so that we can update the start/end nodes in reconciliation
+			each_effect ??= /** @type {Effect} */ (active_effect);
+
+			array = get(each_array);
+			var length = array.length;
+
+			if (was_empty && length === 0) {
+				// ignore updates if the array is empty,
+				// and it already was empty on previous run
+				return;
+			}
+			was_empty = length === 0;
+
+			// this is separate to the previous block because `hydrating` might change
+			var item, i, value, key; 
+
+			{
+				if (should_defer_append()) {
+					var keys = new Set();
+					var batch = /** @type {Batch} */ (current_batch);
+
+					for (i = 0; i < length; i += 1) {
+						value = array[i];
+						key = get_key(value, i);
+
+						var existing = state.items.get(key) ?? offscreen_items.get(key);
+
+						if (existing) {
+							// update before reconciliation, to trigger any async updates
+							{
+								update_item(existing, value, i);
+							}
+						} else {
+							item = create_item(
+								null,
+								state,
+								null,
+								null,
+								value,
+								key,
+								i,
+								render_fn,
+								flags,
+								get_collection,
+								true
+							);
+
+							offscreen_items.set(key, item);
+						}
+
+						keys.add(key);
+					}
+
+					for (const [key, item] of state.items) {
+						if (!keys.has(key)) {
+							batch.skipped_effects.add(item.e);
+						}
+					}
+
+					batch.add_callback(commit);
+				} else {
+					commit();
+				}
+			}
+
+			// When we mount the each block for the first time, the collection won't be
+			// connected to this effect as the effect hasn't finished running yet and its deps
+			// won't be assigned. However, it's possible that when reconciling the each block
+			// that a mutation occurred and it's made the collection MAYBE_DIRTY, so reading the
+			// collection again can provide consistency to the reactive graph again as the deriveds
+			// will now be `CLEAN`.
+			get(each_array);
+		});
+	}
+
+	/**
+	 * Add, remove, or reorder items output by an each block as its input changes
+	 * @template V
+	 * @param {Effect} each_effect
+	 * @param {Array<V>} array
+	 * @param {EachState} state
+	 * @param {Map<any, EachItem>} offscreen_items
+	 * @param {Element | Comment | Text} anchor
+	 * @param {(anchor: Node, item: MaybeSource<V>, index: number | Source<number>, collection: () => V[]) => void} render_fn
+	 * @param {number} flags
+	 * @param {(value: V, index: number) => any} get_key
+	 * @param {() => V[]} get_collection
+	 * @returns {void}
+	 */
+	function reconcile(
+		each_effect,
+		array,
+		state,
+		offscreen_items,
+		anchor,
+		render_fn,
+		flags,
+		get_key,
+		get_collection
+	) {
+
+		var length = array.length;
+		var items = state.items;
+		var first = state.first;
+		var current = first;
+
+		/** @type {undefined | Set<EachItem>} */
+		var seen;
+
+		/** @type {EachItem | null} */
+		var prev = null;
+
+		/** @type {EachItem[]} */
+		var matched = [];
+
+		/** @type {EachItem[]} */
+		var stashed = [];
+
+		/** @type {V} */
+		var value;
+
+		/** @type {any} */
+		var key;
+
+		/** @type {EachItem | undefined} */
+		var item;
+
+		/** @type {number} */
+		var i;
+
+		for (i = 0; i < length; i += 1) {
+			value = array[i];
+			key = get_key(value, i);
+
+			item = items.get(key);
+
+			if (item === undefined) {
+				var pending = offscreen_items.get(key);
+
+				if (pending !== undefined) {
+					offscreen_items.delete(key);
+					items.set(key, pending);
+
+					var next = prev ? prev.next : current;
+
+					link(state, prev, pending);
+					link(state, pending, next);
+
+					move(pending, next, anchor);
+					prev = pending;
+				} else {
+					var child_anchor = current ? /** @type {TemplateNode} */ (current.e.nodes_start) : anchor;
+
+					prev = create_item(
+						child_anchor,
+						state,
+						prev,
+						prev === null ? state.first : prev.next,
+						value,
+						key,
+						i,
+						render_fn,
+						flags,
+						get_collection
+					);
+				}
+
+				items.set(key, prev);
+
+				matched = [];
+				stashed = [];
+
+				current = prev.next;
+				continue;
+			}
+
+			{
+				update_item(item, value, i);
+			}
+
+			if ((item.e.f & INERT) !== 0) {
+				resume_effect(item.e);
+			}
+
+			if (item !== current) {
+				if (seen !== undefined && seen.has(item)) {
+					if (matched.length < stashed.length) {
+						// more efficient to move later items to the front
+						var start = stashed[0];
+						var j;
+
+						prev = start.prev;
+
+						var a = matched[0];
+						var b = matched[matched.length - 1];
+
+						for (j = 0; j < matched.length; j += 1) {
+							move(matched[j], start, anchor);
+						}
+
+						for (j = 0; j < stashed.length; j += 1) {
+							seen.delete(stashed[j]);
+						}
+
+						link(state, a.prev, b.next);
+						link(state, prev, a);
+						link(state, b, start);
+
+						current = start;
+						prev = b;
+						i -= 1;
+
+						matched = [];
+						stashed = [];
+					} else {
+						// more efficient to move earlier items to the back
+						seen.delete(item);
+						move(item, current, anchor);
+
+						link(state, item.prev, item.next);
+						link(state, item, prev === null ? state.first : prev.next);
+						link(state, prev, item);
+
+						prev = item;
+					}
+
+					continue;
+				}
+
+				matched = [];
+				stashed = [];
+
+				while (current !== null && current.k !== key) {
+					// If the each block isn't inert and an item has an effect that is already inert,
+					// skip over adding it to our seen Set as the item is already being handled
+					if ((current.e.f & INERT) === 0) {
+						(seen ??= new Set()).add(current);
+					}
+					stashed.push(current);
+					current = current.next;
+				}
+
+				if (current === null) {
+					continue;
+				}
+
+				item = current;
+			}
+
+			matched.push(item);
+			prev = item;
+			current = item.next;
+		}
+
+		if (current !== null || seen !== undefined) {
+			var to_destroy = seen === undefined ? [] : array_from(seen);
+
+			while (current !== null) {
+				// If the each block isn't inert, then inert effects are currently outroing and will be removed once the transition is finished
+				if ((current.e.f & INERT) === 0) {
+					to_destroy.push(current);
+				}
+				current = current.next;
+			}
+
+			var destroy_length = to_destroy.length;
+
+			if (destroy_length > 0) {
+				var controlled_anchor = length === 0 ? anchor : null;
+
+				pause_effects(state, to_destroy, controlled_anchor);
+			}
+		}
+
+		each_effect.first = state.first && state.first.e;
+		each_effect.last = prev && prev.e;
+
+		for (var unused of offscreen_items.values()) {
+			destroy_effect(unused.e);
+		}
+
+		offscreen_items.clear();
+	}
+
+	/**
+	 * @param {EachItem} item
+	 * @param {any} value
+	 * @param {number} index
+	 * @param {number} type
+	 * @returns {void}
+	 */
+	function update_item(item, value, index, type) {
+		{
+			internal_set(item.v, value);
+		}
+
+		{
+			item.i = index;
+		}
+	}
+
+	/**
+	 * @template V
+	 * @param {Node | null} anchor
+	 * @param {EachState} state
+	 * @param {EachItem | null} prev
+	 * @param {EachItem | null} next
+	 * @param {V} value
+	 * @param {unknown} key
+	 * @param {number} index
+	 * @param {(anchor: Node, item: V | Source<V>, index: number | Value<number>, collection: () => V[]) => void} render_fn
+	 * @param {number} flags
+	 * @param {() => V[]} get_collection
+	 * @param {boolean} [deferred]
+	 * @returns {EachItem}
+	 */
+	function create_item(
+		anchor,
+		state,
+		prev,
+		next,
+		value,
+		key,
+		index,
+		render_fn,
+		flags,
+		get_collection,
+		deferred
+	) {
+		var reactive = (flags & EACH_ITEM_REACTIVE) !== 0;
+		var mutable = (flags & EACH_ITEM_IMMUTABLE) === 0;
+
+		var v = reactive ? (mutable ? mutable_source(value, false, false) : source(value)) : value;
+		var i = (flags & EACH_INDEX_REACTIVE) === 0 ? index : source(index);
+
+		if (DEV && reactive) {
+			// For tracing purposes, we need to link the source signal we create with the
+			// collection + index so that tracing works as intended
+			/** @type {Value} */ (v).trace = () => {
+				var collection_index = typeof i === 'number' ? index : i.v;
+				// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+				get_collection()[collection_index];
+			};
+		}
+
+		/** @type {EachItem} */
+		var item = {
+			i,
+			v,
+			k: key,
+			a: null,
+			// @ts-expect-error
+			e: null,
+			prev,
+			next
+		};
+
+		try {
+			if (anchor === null) {
+				var fragment = document.createDocumentFragment();
+				fragment.append((anchor = create_text()));
+			}
+
+			item.e = branch(() => render_fn(/** @type {Node} */ (anchor), v, i, get_collection), hydrating);
+
+			item.e.prev = prev && prev.e;
+			item.e.next = next && next.e;
+
+			if (prev === null) {
+				if (!deferred) {
+					state.first = item;
+				}
+			} else {
+				prev.next = item;
+				prev.e.next = item.e;
+			}
+
+			if (next !== null) {
+				next.prev = item;
+				next.e.prev = item.e;
+			}
+
+			return item;
+		} finally {
+		}
+	}
+
+	/**
+	 * @param {EachItem} item
+	 * @param {EachItem | null} next
+	 * @param {Text | Element | Comment} anchor
+	 */
+	function move(item, next, anchor) {
+		var end = item.next ? /** @type {TemplateNode} */ (item.next.e.nodes_start) : anchor;
+
+		var dest = next ? /** @type {TemplateNode} */ (next.e.nodes_start) : anchor;
+		var node = /** @type {TemplateNode} */ (item.e.nodes_start);
+
+		while (node !== null && node !== end) {
+			var next_node = /** @type {TemplateNode} */ (get_next_sibling(node));
+			dest.before(node);
+			node = next_node;
+		}
+	}
+
+	/**
+	 * @param {EachState} state
+	 * @param {EachItem | null} prev
+	 * @param {EachItem | null} next
+	 */
+	function link(state, prev, next) {
+		if (prev === null) {
+			state.first = next;
+		} else {
+			prev.next = next;
+			prev.e.next = next && next.e;
+		}
+
+		if (next !== null) {
+			next.prev = prev;
+			next.e.prev = prev && prev.e;
+		}
+	}
+
+	/**
+	 * Selects the correct option(s) (depending on whether this is a multiple select)
+	 * @template V
+	 * @param {HTMLSelectElement} select
+	 * @param {V} value
+	 * @param {boolean} mounting
+	 */
+	function select_option(select, value, mounting = false) {
+		if (select.multiple) {
+			// If value is null or undefined, keep the selection as is
+			if (value == undefined) {
+				return;
+			}
+
+			// If not an array, warn and keep the selection as is
+			if (!is_array(value)) {
+				return select_multiple_invalid_value();
+			}
+
+			// Otherwise, update the selection
+			for (var option of select.options) {
+				option.selected = value.includes(get_option_value(option));
+			}
+
+			return;
+		}
+
+		for (option of select.options) {
+			var option_value = get_option_value(option);
+			if (is(option_value, value)) {
+				option.selected = true;
+				return;
+			}
+		}
+
+		if (!mounting || value !== undefined) {
+			select.selectedIndex = -1; // no option should be selected
+		}
+	}
+
+	/**
+	 * Selects the correct option(s) if `value` is given,
+	 * and then sets up a mutation observer to sync the
+	 * current selection to the dom when it changes. Such
+	 * changes could for example occur when options are
+	 * inside an `#each` block.
+	 * @param {HTMLSelectElement} select
+	 */
+	function init_select(select) {
+		var observer = new MutationObserver(() => {
+			// @ts-ignore
+			select_option(select, select.__value);
+			// Deliberately don't update the potential binding value,
+			// the model should be preserved unless explicitly changed
+		});
+
+		observer.observe(select, {
+			// Listen to option element changes
+			childList: true,
+			subtree: true, // because of <optgroup>
+			// Listen to option element value attribute changes
+			// (doesn't get notified of select value changes,
+			// because that property is not reflected as an attribute)
+			attributes: true,
+			attributeFilter: ['value']
+		});
+
+		teardown(() => {
+			observer.disconnect();
+		});
+	}
+
+	/**
+	 * @param {HTMLSelectElement} select
+	 * @param {() => unknown} get
+	 * @param {(value: unknown) => void} set
+	 * @returns {void}
+	 */
+	function bind_select_value(select, get, set = get) {
+		var mounting = true;
+
+		listen_to_event_and_reset_event(select, 'change', (is_reset) => {
+			var query = is_reset ? '[selected]' : ':checked';
+			/** @type {unknown} */
+			var value;
+
+			if (select.multiple) {
+				value = [].map.call(select.querySelectorAll(query), get_option_value);
+			} else {
+				/** @type {HTMLOptionElement | null} */
+				var selected_option =
+					select.querySelector(query) ??
+					// will fall back to first non-disabled option if no option is selected
+					select.querySelector('option:not([disabled])');
+				value = selected_option && get_option_value(selected_option);
+			}
+
+			set(value);
+		});
+
+		// Needs to be an effect, not a render_effect, so that in case of each loops the logic runs after the each block has updated
+		effect(() => {
+			var value = get();
+			select_option(select, value, mounting);
+
+			// Mounting and value undefined -> take selection from dom
+			if (mounting && value === undefined) {
+				/** @type {HTMLOptionElement | null} */
+				var selected_option = select.querySelector(':checked');
+				if (selected_option !== null) {
+					value = get_option_value(selected_option);
+					set(value);
+				}
+			}
+
+			// @ts-ignore
+			select.__value = value;
+			mounting = false;
+		});
+
+		init_select(select);
+	}
+
+	/** @param {HTMLOptionElement} option */
+	function get_option_value(option) {
+		// __value only exists if the <option> has a value attribute
+		if ('__value' in option) {
+			return option.__value;
+		} else {
+			return option.value;
+		}
 	}
 
 	/**
@@ -5340,6 +6274,7 @@ ${properties}`
 	 */ function valueOrDefault(value, defaultValue) {
 	    return typeof value === 'undefined' ? defaultValue : value;
 	}
+	const toPercentage = (value, dimension)=>typeof value === 'string' && value.endsWith('%') ? parseFloat(value) / 100 : +value / dimension;
 	const toDimension = (value, dimension)=>typeof value === 'string' && value.endsWith('%') ? parseFloat(value) / 100 * dimension : +value;
 	/**
 	 * Calls `fn` with the given `args` in the scope defined by `thisArg` and returns the
@@ -5667,7 +6602,7 @@ ${properties}`
 	    const angleToEnd = _normalizeAngle(e - a);
 	    const startToAngle = _normalizeAngle(a - s);
 	    const endToAngle = _normalizeAngle(a - e);
-	    return a === s || a === e || sameAngleIsFullCircle || angleToStart > angleToEnd && startToAngle < endToAngle;
+	    return a === s || a === e || sameAngleIsFullCircle && s === e || angleToStart > angleToEnd && startToAngle < endToAngle;
 	}
 	/**
 	 * Limit `value` between `min` and `max`
@@ -6338,7 +7273,7 @@ ${properties}`
 	        appliers.forEach((apply)=>apply(this));
 	    }
 	}
-	var defaults = /* #__PURE__ */ new Defaults({
+	var defaults$1 = /* #__PURE__ */ new Defaults({
 	    _scriptable: (name)=>!name.startsWith('on'),
 	    _indexable: (name)=>name !== 'events',
 	    hover: {
@@ -6404,7 +7339,7 @@ ${properties}`
 	    ctx.clearRect(0, 0, canvas.width, canvas.height);
 	    ctx.restore();
 	}
-	function drawPoint(ctx, options, x, y) {
+	function drawPoint$1(ctx, options, x, y) {
 	    // eslint-disable-next-line @typescript-eslint/no-use-before-define
 	    drawPointLegend(ctx, options, x, y, null);
 	}
@@ -6745,7 +7680,7 @@ ${properties}`
 	 * @private
 	 */ function toFont(options, fallback) {
 	    options = options || {};
-	    fallback = fallback || defaults.font;
+	    fallback = fallback || defaults$1.font;
 	    let size = valueOrDefault(options.size, fallback.size);
 	    if (typeof size === 'string') {
 	        size = parseInt(size, 10);
@@ -6776,12 +7711,18 @@ ${properties}`
 	 * @param info - object to return information about resolution in
 	 * @param info.cacheable - Will be set to `false` if option is not cacheable.
 	 * @since 2.7.0
-	 */ function resolve(inputs, context, index, info) {
+	 */ function resolve$1(inputs, context, index, info) {
 	    let i, ilen, value;
 	    for(i = 0, ilen = inputs.length; i < ilen; ++i){
 	        value = inputs[i];
 	        if (value === undefined) {
 	            continue;
+	        }
+	        if (context !== undefined && typeof value === 'function') {
+	            value = value(context);
+	        }
+	        if (index !== undefined && isArray(value)) {
+	            value = value[index % value.length];
 	        }
 	        if (value !== undefined) {
 	            return value;
@@ -7150,7 +8091,7 @@ ${properties}`
 	function getStyle(el, property) {
 	    return getComputedStyle(el).getPropertyValue(property);
 	}
-	const positions = [
+	const positions$1 = [
 	    'top',
 	    'right',
 	    'bottom',
@@ -7160,7 +8101,7 @@ ${properties}`
 	    const result = {};
 	    suffix = suffix ? '-' + suffix : '';
 	    for(let i = 0; i < 4; i++){
-	        const pos = positions[i];
+	        const pos = positions$1[i];
 	        result[pos] = parseFloat(styles[style + '-' + pos + suffix]) || 0;
 	    }
 	    result.width = result.left + result.right;
@@ -7198,7 +8139,7 @@ ${properties}`
 	 * @param event
 	 * @param chart
 	 * @returns x and y coordinates of the event
-	 */ function getRelativePosition(event, chart) {
+	 */ function getRelativePosition$1(event, chart) {
 	    if ('native' in event) {
 	        return event;
 	    }
@@ -7594,13 +8535,13 @@ ${properties}`
 	class Animation {
 	    constructor(cfg, target, prop, to){
 	        const currentValue = target[prop];
-	        to = resolve([
+	        to = resolve$1([
 	            cfg.to,
 	            to,
 	            currentValue,
 	            cfg.from
 	        ]);
-	        const from = resolve([
+	        const from = resolve$1([
 	            cfg.from,
 	            currentValue,
 	            to
@@ -7630,13 +8571,13 @@ ${properties}`
 	            this._duration = Math.floor(Math.max(remain, cfg.duration));
 	            this._total += elapsed;
 	            this._loop = !!cfg.loop;
-	            this._to = resolve([
+	            this._to = resolve$1([
 	                cfg.to,
 	                to,
 	                currentValue,
 	                cfg.from
 	            ]);
-	            this._from = resolve([
+	            this._from = resolve$1([
 	                cfg.from,
 	                currentValue,
 	                to
@@ -7701,7 +8642,7 @@ ${properties}`
 	        if (!isObject(config)) {
 	            return;
 	        }
-	        const animationOptions = Object.keys(defaults.animation);
+	        const animationOptions = Object.keys(defaults$1.animation);
 	        const animatedProps = this._properties;
 	        Object.getOwnPropertyNames(config).forEach((key)=>{
 	            const cfg = config[key];
@@ -8399,7 +9340,7 @@ ${properties}`
 	            ''
 	        ];
 	        const scopes = config.getOptionScopes(this.getDataset(), scopeKeys);
-	        const names = Object.keys(defaults.elements[elementType]);
+	        const names = Object.keys(defaults$1.elements[elementType]);
 	        const context = ()=>this.getContext(index, active, mode);
 	        const values = config.resolveNamedOptions(scopes, names, context, prefixes);
 	        if (values.$shared) {
@@ -9094,6 +10035,305 @@ ${properties}`
 	    }
 	}
 
+	function getRatioAndOffset(rotation, circumference, cutout) {
+	    let ratioX = 1;
+	    let ratioY = 1;
+	    let offsetX = 0;
+	    let offsetY = 0;
+	    if (circumference < TAU) {
+	        const startAngle = rotation;
+	        const endAngle = startAngle + circumference;
+	        const startX = Math.cos(startAngle);
+	        const startY = Math.sin(startAngle);
+	        const endX = Math.cos(endAngle);
+	        const endY = Math.sin(endAngle);
+	        const calcMax = (angle, a, b)=>_angleBetween(angle, startAngle, endAngle, true) ? 1 : Math.max(a, a * cutout, b, b * cutout);
+	        const calcMin = (angle, a, b)=>_angleBetween(angle, startAngle, endAngle, true) ? -1 : Math.min(a, a * cutout, b, b * cutout);
+	        const maxX = calcMax(0, startX, endX);
+	        const maxY = calcMax(HALF_PI, startY, endY);
+	        const minX = calcMin(PI, startX, endX);
+	        const minY = calcMin(PI + HALF_PI, startY, endY);
+	        ratioX = (maxX - minX) / 2;
+	        ratioY = (maxY - minY) / 2;
+	        offsetX = -(maxX + minX) / 2;
+	        offsetY = -(maxY + minY) / 2;
+	    }
+	    return {
+	        ratioX,
+	        ratioY,
+	        offsetX,
+	        offsetY
+	    };
+	}
+	class DoughnutController extends DatasetController {
+	    static id = 'doughnut';
+	 static defaults = {
+	        datasetElementType: false,
+	        dataElementType: 'arc',
+	        animation: {
+	            animateRotate: true,
+	            animateScale: false
+	        },
+	        animations: {
+	            numbers: {
+	                type: 'number',
+	                properties: [
+	                    'circumference',
+	                    'endAngle',
+	                    'innerRadius',
+	                    'outerRadius',
+	                    'startAngle',
+	                    'x',
+	                    'y',
+	                    'offset',
+	                    'borderWidth',
+	                    'spacing'
+	                ]
+	            }
+	        },
+	        cutout: '50%',
+	        rotation: 0,
+	        circumference: 360,
+	        radius: '100%',
+	        spacing: 0,
+	        indexAxis: 'r'
+	    };
+	    static descriptors = {
+	        _scriptable: (name)=>name !== 'spacing',
+	        _indexable: (name)=>name !== 'spacing' && !name.startsWith('borderDash') && !name.startsWith('hoverBorderDash')
+	    };
+	 static overrides = {
+	        aspectRatio: 1,
+	        plugins: {
+	            legend: {
+	                labels: {
+	                    generateLabels (chart) {
+	                        const data = chart.data;
+	                        if (data.labels.length && data.datasets.length) {
+	                            const { labels: { pointStyle , color  }  } = chart.legend.options;
+	                            return data.labels.map((label, i)=>{
+	                                const meta = chart.getDatasetMeta(0);
+	                                const style = meta.controller.getStyle(i);
+	                                return {
+	                                    text: label,
+	                                    fillStyle: style.backgroundColor,
+	                                    strokeStyle: style.borderColor,
+	                                    fontColor: color,
+	                                    lineWidth: style.borderWidth,
+	                                    pointStyle: pointStyle,
+	                                    hidden: !chart.getDataVisibility(i),
+	                                    index: i
+	                                };
+	                            });
+	                        }
+	                        return [];
+	                    }
+	                },
+	                onClick (e, legendItem, legend) {
+	                    legend.chart.toggleDataVisibility(legendItem.index);
+	                    legend.chart.update();
+	                }
+	            }
+	        }
+	    };
+	    constructor(chart, datasetIndex){
+	        super(chart, datasetIndex);
+	        this.enableOptionSharing = true;
+	        this.innerRadius = undefined;
+	        this.outerRadius = undefined;
+	        this.offsetX = undefined;
+	        this.offsetY = undefined;
+	    }
+	    linkScales() {}
+	 parse(start, count) {
+	        const data = this.getDataset().data;
+	        const meta = this._cachedMeta;
+	        if (this._parsing === false) {
+	            meta._parsed = data;
+	        } else {
+	            let getter = (i)=>+data[i];
+	            if (isObject(data[start])) {
+	                const { key ='value'  } = this._parsing;
+	                getter = (i)=>+resolveObjectKey(data[i], key);
+	            }
+	            let i, ilen;
+	            for(i = start, ilen = start + count; i < ilen; ++i){
+	                meta._parsed[i] = getter(i);
+	            }
+	        }
+	    }
+	 _getRotation() {
+	        return toRadians(this.options.rotation - 90);
+	    }
+	 _getCircumference() {
+	        return toRadians(this.options.circumference);
+	    }
+	 _getRotationExtents() {
+	        let min = TAU;
+	        let max = -TAU;
+	        for(let i = 0; i < this.chart.data.datasets.length; ++i){
+	            if (this.chart.isDatasetVisible(i) && this.chart.getDatasetMeta(i).type === this._type) {
+	                const controller = this.chart.getDatasetMeta(i).controller;
+	                const rotation = controller._getRotation();
+	                const circumference = controller._getCircumference();
+	                min = Math.min(min, rotation);
+	                max = Math.max(max, rotation + circumference);
+	            }
+	        }
+	        return {
+	            rotation: min,
+	            circumference: max - min
+	        };
+	    }
+	 update(mode) {
+	        const chart = this.chart;
+	        const { chartArea  } = chart;
+	        const meta = this._cachedMeta;
+	        const arcs = meta.data;
+	        const spacing = this.getMaxBorderWidth() + this.getMaxOffset(arcs) + this.options.spacing;
+	        const maxSize = Math.max((Math.min(chartArea.width, chartArea.height) - spacing) / 2, 0);
+	        const cutout = Math.min(toPercentage(this.options.cutout, maxSize), 1);
+	        const chartWeight = this._getRingWeight(this.index);
+	        const { circumference , rotation  } = this._getRotationExtents();
+	        const { ratioX , ratioY , offsetX , offsetY  } = getRatioAndOffset(rotation, circumference, cutout);
+	        const maxWidth = (chartArea.width - spacing) / ratioX;
+	        const maxHeight = (chartArea.height - spacing) / ratioY;
+	        const maxRadius = Math.max(Math.min(maxWidth, maxHeight) / 2, 0);
+	        const outerRadius = toDimension(this.options.radius, maxRadius);
+	        const innerRadius = Math.max(outerRadius * cutout, 0);
+	        const radiusLength = (outerRadius - innerRadius) / this._getVisibleDatasetWeightTotal();
+	        this.offsetX = offsetX * outerRadius;
+	        this.offsetY = offsetY * outerRadius;
+	        meta.total = this.calculateTotal();
+	        this.outerRadius = outerRadius - radiusLength * this._getRingWeightOffset(this.index);
+	        this.innerRadius = Math.max(this.outerRadius - radiusLength * chartWeight, 0);
+	        this.updateElements(arcs, 0, arcs.length, mode);
+	    }
+	 _circumference(i, reset) {
+	        const opts = this.options;
+	        const meta = this._cachedMeta;
+	        const circumference = this._getCircumference();
+	        if (reset && opts.animation.animateRotate || !this.chart.getDataVisibility(i) || meta._parsed[i] === null || meta.data[i].hidden) {
+	            return 0;
+	        }
+	        return this.calculateCircumference(meta._parsed[i] * circumference / TAU);
+	    }
+	    updateElements(arcs, start, count, mode) {
+	        const reset = mode === 'reset';
+	        const chart = this.chart;
+	        const chartArea = chart.chartArea;
+	        const opts = chart.options;
+	        const animationOpts = opts.animation;
+	        const centerX = (chartArea.left + chartArea.right) / 2;
+	        const centerY = (chartArea.top + chartArea.bottom) / 2;
+	        const animateScale = reset && animationOpts.animateScale;
+	        const innerRadius = animateScale ? 0 : this.innerRadius;
+	        const outerRadius = animateScale ? 0 : this.outerRadius;
+	        const { sharedOptions , includeOptions  } = this._getSharedOptions(start, mode);
+	        let startAngle = this._getRotation();
+	        let i;
+	        for(i = 0; i < start; ++i){
+	            startAngle += this._circumference(i, reset);
+	        }
+	        for(i = start; i < start + count; ++i){
+	            const circumference = this._circumference(i, reset);
+	            const arc = arcs[i];
+	            const properties = {
+	                x: centerX + this.offsetX,
+	                y: centerY + this.offsetY,
+	                startAngle,
+	                endAngle: startAngle + circumference,
+	                circumference,
+	                outerRadius,
+	                innerRadius
+	            };
+	            if (includeOptions) {
+	                properties.options = sharedOptions || this.resolveDataElementOptions(i, arc.active ? 'active' : mode);
+	            }
+	            startAngle += circumference;
+	            this.updateElement(arc, i, properties, mode);
+	        }
+	    }
+	    calculateTotal() {
+	        const meta = this._cachedMeta;
+	        const metaData = meta.data;
+	        let total = 0;
+	        let i;
+	        for(i = 0; i < metaData.length; i++){
+	            const value = meta._parsed[i];
+	            if (value !== null && !isNaN(value) && this.chart.getDataVisibility(i) && !metaData[i].hidden) {
+	                total += Math.abs(value);
+	            }
+	        }
+	        return total;
+	    }
+	    calculateCircumference(value) {
+	        const total = this._cachedMeta.total;
+	        if (total > 0 && !isNaN(value)) {
+	            return TAU * (Math.abs(value) / total);
+	        }
+	        return 0;
+	    }
+	    getLabelAndValue(index) {
+	        const meta = this._cachedMeta;
+	        const chart = this.chart;
+	        const labels = chart.data.labels || [];
+	        const value = formatNumber(meta._parsed[index], chart.options.locale);
+	        return {
+	            label: labels[index] || '',
+	            value
+	        };
+	    }
+	    getMaxBorderWidth(arcs) {
+	        let max = 0;
+	        const chart = this.chart;
+	        let i, ilen, meta, controller, options;
+	        if (!arcs) {
+	            for(i = 0, ilen = chart.data.datasets.length; i < ilen; ++i){
+	                if (chart.isDatasetVisible(i)) {
+	                    meta = chart.getDatasetMeta(i);
+	                    arcs = meta.data;
+	                    controller = meta.controller;
+	                    break;
+	                }
+	            }
+	        }
+	        if (!arcs) {
+	            return 0;
+	        }
+	        for(i = 0, ilen = arcs.length; i < ilen; ++i){
+	            options = controller.resolveDataElementOptions(i);
+	            if (options.borderAlign !== 'inner') {
+	                max = Math.max(max, options.borderWidth || 0, options.hoverBorderWidth || 0);
+	            }
+	        }
+	        return max;
+	    }
+	    getMaxOffset(arcs) {
+	        let max = 0;
+	        for(let i = 0, ilen = arcs.length; i < ilen; ++i){
+	            const options = this.resolveDataElementOptions(i);
+	            max = Math.max(max, options.offset || 0, options.hoverOffset || 0);
+	        }
+	        return max;
+	    }
+	 _getRingWeightOffset(datasetIndex) {
+	        let ringWeightOffset = 0;
+	        for(let i = 0; i < datasetIndex; ++i){
+	            if (this.chart.isDatasetVisible(i)) {
+	                ringWeightOffset += this._getRingWeight(i);
+	            }
+	        }
+	        return ringWeightOffset;
+	    }
+	 _getRingWeight(datasetIndex) {
+	        return Math.max(valueOrDefault(this.chart.data.datasets[datasetIndex].weight, 1), 0);
+	    }
+	 _getVisibleDatasetWeightTotal() {
+	        return this._getRingWeightOffset(this.chart.data.datasets.length) || 1;
+	    }
+	}
+
 	class ScatterController extends DatasetController {
 	    static id = 'scatter';
 	 static defaults = {
@@ -9442,7 +10682,7 @@ ${properties}`
 	 var Interaction = {
 	    modes: {
 	 index (chart, e, options, useFinalPosition) {
-	            const position = getRelativePosition(e, chart);
+	            const position = getRelativePosition$1(e, chart);
 	            const axis = options.axis || 'x';
 	            const includeInvisible = options.includeInvisible || false;
 	            const items = options.intersect ? getIntersectItems(chart, position, axis, useFinalPosition, includeInvisible) : getNearestItems(chart, position, axis, false, useFinalPosition, includeInvisible);
@@ -9464,7 +10704,7 @@ ${properties}`
 	            return elements;
 	        },
 	 dataset (chart, e, options, useFinalPosition) {
-	            const position = getRelativePosition(e, chart);
+	            const position = getRelativePosition$1(e, chart);
 	            const axis = options.axis || 'xy';
 	            const includeInvisible = options.includeInvisible || false;
 	            let items = options.intersect ? getIntersectItems(chart, position, axis, useFinalPosition, includeInvisible) : getNearestItems(chart, position, axis, false, useFinalPosition, includeInvisible);
@@ -9483,23 +10723,23 @@ ${properties}`
 	            return items;
 	        },
 	 point (chart, e, options, useFinalPosition) {
-	            const position = getRelativePosition(e, chart);
+	            const position = getRelativePosition$1(e, chart);
 	            const axis = options.axis || 'xy';
 	            const includeInvisible = options.includeInvisible || false;
 	            return getIntersectItems(chart, position, axis, useFinalPosition, includeInvisible);
 	        },
 	 nearest (chart, e, options, useFinalPosition) {
-	            const position = getRelativePosition(e, chart);
+	            const position = getRelativePosition$1(e, chart);
 	            const axis = options.axis || 'xy';
 	            const includeInvisible = options.includeInvisible || false;
 	            return getNearestItems(chart, position, axis, options.intersect, useFinalPosition, includeInvisible);
 	        },
 	 x (chart, e, options, useFinalPosition) {
-	            const position = getRelativePosition(e, chart);
+	            const position = getRelativePosition$1(e, chart);
 	            return getAxisItems(chart, position, 'x', options.intersect, useFinalPosition);
 	        },
 	 y (chart, e, options, useFinalPosition) {
-	            const position = getRelativePosition(e, chart);
+	            const position = getRelativePosition$1(e, chart);
 	            return getAxisItems(chart, position, 'y', options.intersect, useFinalPosition);
 	        }
 	    }
@@ -9870,7 +11110,7 @@ ${properties}`
 	    }
 	}
 
-	const EXPANDO_KEY = '$chartjs';
+	const EXPANDO_KEY$1 = '$chartjs';
 	 const EVENT_TYPES = {
 	    touchstart: 'mousedown',
 	    touchmove: 'mousemove',
@@ -9887,7 +11127,7 @@ ${properties}`
 	    const style = canvas.style;
 	    const renderHeight = canvas.getAttribute('height');
 	    const renderWidth = canvas.getAttribute('width');
-	    canvas[EXPANDO_KEY] = {
+	    canvas[EXPANDO_KEY$1] = {
 	        initial: {
 	            height: renderHeight,
 	            width: renderWidth,
@@ -9933,7 +11173,7 @@ ${properties}`
 	}
 	function fromNativeEvent(event, chart) {
 	    const type = EVENT_TYPES[event.type] || event.type;
-	    const { x , y  } = getRelativePosition(event, chart);
+	    const { x , y  } = getRelativePosition$1(event, chart);
 	    return {
 	        type,
 	        chart,
@@ -10066,10 +11306,10 @@ ${properties}`
 	    }
 	 releaseContext(context) {
 	        const canvas = context.canvas;
-	        if (!canvas[EXPANDO_KEY]) {
+	        if (!canvas[EXPANDO_KEY$1]) {
 	            return false;
 	        }
-	        const initial = canvas[EXPANDO_KEY].initial;
+	        const initial = canvas[EXPANDO_KEY$1].initial;
 	        [
 	            'height',
 	            'width'
@@ -10086,7 +11326,7 @@ ${properties}`
 	            canvas.style[key] = style[key];
 	        });
 	        canvas.width = canvas.width;
-	        delete canvas[EXPANDO_KEY];
+	        delete canvas[EXPANDO_KEY$1];
 	        return true;
 	    }
 	 addEventListener(chart, type, listener) {
@@ -11578,7 +12818,7 @@ ${properties}`
 	        items[id] = item;
 	        registerDefaults(item, scope, parentScope);
 	        if (this.override) {
-	            defaults.override(item.id, item.overrides);
+	            defaults$1.override(item.id, item.overrides);
 	        }
 	        return scope;
 	    }
@@ -11592,8 +12832,8 @@ ${properties}`
 	        if (id in items) {
 	            delete items[id];
 	        }
-	        if (scope && id in defaults[scope]) {
-	            delete defaults[scope][id];
+	        if (scope && id in defaults$1[scope]) {
+	            delete defaults$1[scope][id];
 	            if (this.override) {
 	                delete overrides[id];
 	            }
@@ -11602,16 +12842,16 @@ ${properties}`
 	}
 	function registerDefaults(item, scope, parentScope) {
 	    const itemDefaults = merge(Object.create(null), [
-	        parentScope ? defaults.get(parentScope) : {},
-	        defaults.get(scope),
+	        parentScope ? defaults$1.get(parentScope) : {},
+	        defaults$1.get(scope),
 	        item.defaults
 	    ]);
-	    defaults.set(scope, itemDefaults);
+	    defaults$1.set(scope, itemDefaults);
 	    if (item.defaultRoutes) {
 	        routeDefaults(scope, item.defaultRoutes);
 	    }
 	    if (item.descriptors) {
-	        defaults.describe(scope, item.descriptors);
+	        defaults$1.describe(scope, item.descriptors);
 	    }
 	}
 	function routeDefaults(scope, routes) {
@@ -11624,7 +12864,7 @@ ${properties}`
 	        const parts = routes[property].split('.');
 	        const targetName = parts.pop();
 	        const targetScope = parts.join('.');
-	        defaults.route(sourceScope, sourceName, targetScope, targetName);
+	        defaults$1.route(sourceScope, sourceName, targetScope, targetName);
 	    });
 	}
 	function isIChartComponent(proto) {
@@ -11850,7 +13090,7 @@ ${properties}`
 	}
 
 	function getIndexAxis(type, options) {
-	    const datasetDefaults = defaults.datasets[type] || {};
+	    const datasetDefaults = defaults$1.datasets[type] || {};
 	    const datasetOptions = (options.datasets || {})[type] || {};
 	    return datasetOptions.indexAxis || options.indexAxis || datasetDefaults.indexAxis || 'x';
 	}
@@ -11922,7 +13162,7 @@ ${properties}`
 	        if (scaleConf._proxy) {
 	            return console.warn(`Ignoring resolver passed as options for scale: ${id}`);
 	        }
-	        const axis = determineAxis(id, scaleConf, retrieveAxisFromDatasets(id, config), defaults.scales[scaleConf.type]);
+	        const axis = determineAxis(id, scaleConf, retrieveAxisFromDatasets(id, config), defaults$1.scales[scaleConf.type]);
 	        const defaultId = getDefaultScaleIDFromAxis(axis, chartIndexAxis);
 	        const defaultScaleOptions = chartDefaults.scales || {};
 	        scales[id] = mergeIf(Object.create(null), [
@@ -11955,8 +13195,8 @@ ${properties}`
 	    Object.keys(scales).forEach((key)=>{
 	        const scale = scales[key];
 	        mergeIf(scale, [
-	            defaults.scales[scale.type],
-	            defaults.scale
+	            defaults$1.scales[scale.type],
+	            defaults$1.scale
 	        ]);
 	    });
 	    return scales;
@@ -12098,7 +13338,7 @@ ${properties}`
 	            }
 	            keys.forEach((key)=>addIfFound(scopes, options, key));
 	            keys.forEach((key)=>addIfFound(scopes, overrides[type] || {}, key));
-	            keys.forEach((key)=>addIfFound(scopes, defaults, key));
+	            keys.forEach((key)=>addIfFound(scopes, defaults$1, key));
 	            keys.forEach((key)=>addIfFound(scopes, descriptors, key));
 	        });
 	        const array = Array.from(scopes);
@@ -12115,11 +13355,11 @@ ${properties}`
 	        return [
 	            options,
 	            overrides[type] || {},
-	            defaults.datasets[type] || {},
+	            defaults$1.datasets[type] || {},
 	            {
 	                type
 	            },
-	            defaults,
+	            defaults$1,
 	            descriptors
 	        ];
 	    }
@@ -12181,7 +13421,7 @@ ${properties}`
 	    return false;
 	}
 
-	var version = "4.5.0";
+	var version$1 = "4.5.0";
 
 	const KNOWN_POSITIONS = [
 	    'top',
@@ -12252,11 +13492,11 @@ ${properties}`
 	    return e;
 	}
 	class Chart {
-	    static defaults = defaults;
+	    static defaults = defaults$1;
 	    static instances = instances;
 	    static overrides = overrides;
 	    static registry = registry;
-	    static version = version;
+	    static version = version$1;
 	    static getChart = getChart;
 	    static register(...items) {
 	        registry.add(...items);
@@ -12510,7 +13750,7 @@ ${properties}`
 	                meta.controller.linkScales();
 	            } else {
 	                const ControllerClass = registry.getController(type);
-	                const { datasetElementType , dataElementType  } = defaults.datasets[type];
+	                const { datasetElementType , dataElementType  } = defaults$1.datasets[type];
 	                Object.assign(ControllerClass, {
 	                    dataElementType: registry.getElement(dataElementType),
 	                    datasetElementType: datasetElementType && registry.getElement(datasetElementType)
@@ -13075,6 +14315,342 @@ ${properties}`
 	    return each(Chart.instances, (chart)=>chart._plugins.invalidate());
 	}
 
+	function clipSelf(ctx, element, endAngle) {
+	    const { startAngle , x , y , outerRadius , innerRadius , options  } = element;
+	    const { borderWidth , borderJoinStyle  } = options;
+	    const outerAngleClip = Math.min(borderWidth / outerRadius, _normalizeAngle(startAngle - endAngle));
+	    ctx.beginPath();
+	    ctx.arc(x, y, outerRadius - borderWidth / 2, startAngle + outerAngleClip / 2, endAngle - outerAngleClip / 2);
+	    if (innerRadius > 0) {
+	        const innerAngleClip = Math.min(borderWidth / innerRadius, _normalizeAngle(startAngle - endAngle));
+	        ctx.arc(x, y, innerRadius + borderWidth / 2, endAngle - innerAngleClip / 2, startAngle + innerAngleClip / 2, true);
+	    } else {
+	        const clipWidth = Math.min(borderWidth / 2, outerRadius * _normalizeAngle(startAngle - endAngle));
+	        if (borderJoinStyle === 'round') {
+	            ctx.arc(x, y, clipWidth, endAngle - PI / 2, startAngle + PI / 2, true);
+	        } else if (borderJoinStyle === 'bevel') {
+	            const r = 2 * clipWidth * clipWidth;
+	            const endX = -r * Math.cos(endAngle + PI / 2) + x;
+	            const endY = -r * Math.sin(endAngle + PI / 2) + y;
+	            const startX = r * Math.cos(startAngle + PI / 2) + x;
+	            const startY = r * Math.sin(startAngle + PI / 2) + y;
+	            ctx.lineTo(endX, endY);
+	            ctx.lineTo(startX, startY);
+	        }
+	    }
+	    ctx.closePath();
+	    ctx.moveTo(0, 0);
+	    ctx.rect(0, 0, ctx.canvas.width, ctx.canvas.height);
+	    ctx.clip('evenodd');
+	}
+	function clipArc(ctx, element, endAngle) {
+	    const { startAngle , pixelMargin , x , y , outerRadius , innerRadius  } = element;
+	    let angleMargin = pixelMargin / outerRadius;
+	    // Draw an inner border by clipping the arc and drawing a double-width border
+	    // Enlarge the clipping arc by 0.33 pixels to eliminate glitches between borders
+	    ctx.beginPath();
+	    ctx.arc(x, y, outerRadius, startAngle - angleMargin, endAngle + angleMargin);
+	    if (innerRadius > pixelMargin) {
+	        angleMargin = pixelMargin / innerRadius;
+	        ctx.arc(x, y, innerRadius, endAngle + angleMargin, startAngle - angleMargin, true);
+	    } else {
+	        ctx.arc(x, y, pixelMargin, endAngle + HALF_PI, startAngle - HALF_PI);
+	    }
+	    ctx.closePath();
+	    ctx.clip();
+	}
+	function toRadiusCorners(value) {
+	    return _readValueToProps(value, [
+	        'outerStart',
+	        'outerEnd',
+	        'innerStart',
+	        'innerEnd'
+	    ]);
+	}
+	/**
+	 * Parse border radius from the provided options
+	 */ function parseBorderRadius$1(arc, innerRadius, outerRadius, angleDelta) {
+	    const o = toRadiusCorners(arc.options.borderRadius);
+	    const halfThickness = (outerRadius - innerRadius) / 2;
+	    const innerLimit = Math.min(halfThickness, angleDelta * innerRadius / 2);
+	    // Outer limits are complicated. We want to compute the available angular distance at
+	    // a radius of outerRadius - borderRadius because for small angular distances, this term limits.
+	    // We compute at r = outerRadius - borderRadius because this circle defines the center of the border corners.
+	    //
+	    // If the borderRadius is large, that value can become negative.
+	    // This causes the outer borders to lose their radius entirely, which is rather unexpected. To solve that, if borderRadius > outerRadius
+	    // we know that the thickness term will dominate and compute the limits at that point
+	    const computeOuterLimit = (val)=>{
+	        const outerArcLimit = (outerRadius - Math.min(halfThickness, val)) * angleDelta / 2;
+	        return _limitValue(val, 0, Math.min(halfThickness, outerArcLimit));
+	    };
+	    return {
+	        outerStart: computeOuterLimit(o.outerStart),
+	        outerEnd: computeOuterLimit(o.outerEnd),
+	        innerStart: _limitValue(o.innerStart, 0, innerLimit),
+	        innerEnd: _limitValue(o.innerEnd, 0, innerLimit)
+	    };
+	}
+	/**
+	 * Convert (r, 𝜃) to (x, y)
+	 */ function rThetaToXY(r, theta, x, y) {
+	    return {
+	        x: x + r * Math.cos(theta),
+	        y: y + r * Math.sin(theta)
+	    };
+	}
+	/**
+	 * Path the arc, respecting border radius by separating into left and right halves.
+	 *
+	 *   Start      End
+	 *
+	 *    1--->a--->2    Outer
+	 *   /           \
+	 *   8           3
+	 *   |           |
+	 *   |           |
+	 *   7           4
+	 *   \           /
+	 *    6<---b<---5    Inner
+	 */ function pathArc(ctx, element, offset, spacing, end, circular) {
+	    const { x , y , startAngle: start , pixelMargin , innerRadius: innerR  } = element;
+	    const outerRadius = Math.max(element.outerRadius + spacing + offset - pixelMargin, 0);
+	    const innerRadius = innerR > 0 ? innerR + spacing + offset + pixelMargin : 0;
+	    let spacingOffset = 0;
+	    const alpha = end - start;
+	    if (spacing) {
+	        // When spacing is present, it is the same for all items
+	        // So we adjust the start and end angle of the arc such that
+	        // the distance is the same as it would be without the spacing
+	        const noSpacingInnerRadius = innerR > 0 ? innerR - spacing : 0;
+	        const noSpacingOuterRadius = outerRadius > 0 ? outerRadius - spacing : 0;
+	        const avNogSpacingRadius = (noSpacingInnerRadius + noSpacingOuterRadius) / 2;
+	        const adjustedAngle = avNogSpacingRadius !== 0 ? alpha * avNogSpacingRadius / (avNogSpacingRadius + spacing) : alpha;
+	        spacingOffset = (alpha - adjustedAngle) / 2;
+	    }
+	    const beta = Math.max(0.001, alpha * outerRadius - offset / PI) / outerRadius;
+	    const angleOffset = (alpha - beta) / 2;
+	    const startAngle = start + angleOffset + spacingOffset;
+	    const endAngle = end - angleOffset - spacingOffset;
+	    const { outerStart , outerEnd , innerStart , innerEnd  } = parseBorderRadius$1(element, innerRadius, outerRadius, endAngle - startAngle);
+	    const outerStartAdjustedRadius = outerRadius - outerStart;
+	    const outerEndAdjustedRadius = outerRadius - outerEnd;
+	    const outerStartAdjustedAngle = startAngle + outerStart / outerStartAdjustedRadius;
+	    const outerEndAdjustedAngle = endAngle - outerEnd / outerEndAdjustedRadius;
+	    const innerStartAdjustedRadius = innerRadius + innerStart;
+	    const innerEndAdjustedRadius = innerRadius + innerEnd;
+	    const innerStartAdjustedAngle = startAngle + innerStart / innerStartAdjustedRadius;
+	    const innerEndAdjustedAngle = endAngle - innerEnd / innerEndAdjustedRadius;
+	    ctx.beginPath();
+	    if (circular) {
+	        // The first arc segments from point 1 to point a to point 2
+	        const outerMidAdjustedAngle = (outerStartAdjustedAngle + outerEndAdjustedAngle) / 2;
+	        ctx.arc(x, y, outerRadius, outerStartAdjustedAngle, outerMidAdjustedAngle);
+	        ctx.arc(x, y, outerRadius, outerMidAdjustedAngle, outerEndAdjustedAngle);
+	        // The corner segment from point 2 to point 3
+	        if (outerEnd > 0) {
+	            const pCenter = rThetaToXY(outerEndAdjustedRadius, outerEndAdjustedAngle, x, y);
+	            ctx.arc(pCenter.x, pCenter.y, outerEnd, outerEndAdjustedAngle, endAngle + HALF_PI);
+	        }
+	        // The line from point 3 to point 4
+	        const p4 = rThetaToXY(innerEndAdjustedRadius, endAngle, x, y);
+	        ctx.lineTo(p4.x, p4.y);
+	        // The corner segment from point 4 to point 5
+	        if (innerEnd > 0) {
+	            const pCenter = rThetaToXY(innerEndAdjustedRadius, innerEndAdjustedAngle, x, y);
+	            ctx.arc(pCenter.x, pCenter.y, innerEnd, endAngle + HALF_PI, innerEndAdjustedAngle + Math.PI);
+	        }
+	        // The inner arc from point 5 to point b to point 6
+	        const innerMidAdjustedAngle = (endAngle - innerEnd / innerRadius + (startAngle + innerStart / innerRadius)) / 2;
+	        ctx.arc(x, y, innerRadius, endAngle - innerEnd / innerRadius, innerMidAdjustedAngle, true);
+	        ctx.arc(x, y, innerRadius, innerMidAdjustedAngle, startAngle + innerStart / innerRadius, true);
+	        // The corner segment from point 6 to point 7
+	        if (innerStart > 0) {
+	            const pCenter = rThetaToXY(innerStartAdjustedRadius, innerStartAdjustedAngle, x, y);
+	            ctx.arc(pCenter.x, pCenter.y, innerStart, innerStartAdjustedAngle + Math.PI, startAngle - HALF_PI);
+	        }
+	        // The line from point 7 to point 8
+	        const p8 = rThetaToXY(outerStartAdjustedRadius, startAngle, x, y);
+	        ctx.lineTo(p8.x, p8.y);
+	        // The corner segment from point 8 to point 1
+	        if (outerStart > 0) {
+	            const pCenter = rThetaToXY(outerStartAdjustedRadius, outerStartAdjustedAngle, x, y);
+	            ctx.arc(pCenter.x, pCenter.y, outerStart, startAngle - HALF_PI, outerStartAdjustedAngle);
+	        }
+	    } else {
+	        ctx.moveTo(x, y);
+	        const outerStartX = Math.cos(outerStartAdjustedAngle) * outerRadius + x;
+	        const outerStartY = Math.sin(outerStartAdjustedAngle) * outerRadius + y;
+	        ctx.lineTo(outerStartX, outerStartY);
+	        const outerEndX = Math.cos(outerEndAdjustedAngle) * outerRadius + x;
+	        const outerEndY = Math.sin(outerEndAdjustedAngle) * outerRadius + y;
+	        ctx.lineTo(outerEndX, outerEndY);
+	    }
+	    ctx.closePath();
+	}
+	function drawArc(ctx, element, offset, spacing, circular) {
+	    const { fullCircles , startAngle , circumference  } = element;
+	    let endAngle = element.endAngle;
+	    if (fullCircles) {
+	        pathArc(ctx, element, offset, spacing, endAngle, circular);
+	        for(let i = 0; i < fullCircles; ++i){
+	            ctx.fill();
+	        }
+	        if (!isNaN(circumference)) {
+	            endAngle = startAngle + (circumference % TAU || TAU);
+	        }
+	    }
+	    pathArc(ctx, element, offset, spacing, endAngle, circular);
+	    ctx.fill();
+	    return endAngle;
+	}
+	function drawBorder(ctx, element, offset, spacing, circular) {
+	    const { fullCircles , startAngle , circumference , options  } = element;
+	    const { borderWidth , borderJoinStyle , borderDash , borderDashOffset , borderRadius  } = options;
+	    const inner = options.borderAlign === 'inner';
+	    if (!borderWidth) {
+	        return;
+	    }
+	    ctx.setLineDash(borderDash || []);
+	    ctx.lineDashOffset = borderDashOffset;
+	    if (inner) {
+	        ctx.lineWidth = borderWidth * 2;
+	        ctx.lineJoin = borderJoinStyle || 'round';
+	    } else {
+	        ctx.lineWidth = borderWidth;
+	        ctx.lineJoin = borderJoinStyle || 'bevel';
+	    }
+	    let endAngle = element.endAngle;
+	    if (fullCircles) {
+	        pathArc(ctx, element, offset, spacing, endAngle, circular);
+	        for(let i = 0; i < fullCircles; ++i){
+	            ctx.stroke();
+	        }
+	        if (!isNaN(circumference)) {
+	            endAngle = startAngle + (circumference % TAU || TAU);
+	        }
+	    }
+	    if (inner) {
+	        clipArc(ctx, element, endAngle);
+	    }
+	    if (options.selfJoin && endAngle - startAngle >= PI && borderRadius === 0 && borderJoinStyle !== 'miter') {
+	        clipSelf(ctx, element, endAngle);
+	    }
+	    if (!fullCircles) {
+	        pathArc(ctx, element, offset, spacing, endAngle, circular);
+	        ctx.stroke();
+	    }
+	}
+	class ArcElement extends Element$1 {
+	    static id = 'arc';
+	    static defaults = {
+	        borderAlign: 'center',
+	        borderColor: '#fff',
+	        borderDash: [],
+	        borderDashOffset: 0,
+	        borderJoinStyle: undefined,
+	        borderRadius: 0,
+	        borderWidth: 2,
+	        offset: 0,
+	        spacing: 0,
+	        angle: undefined,
+	        circular: true,
+	        selfJoin: false
+	    };
+	    static defaultRoutes = {
+	        backgroundColor: 'backgroundColor'
+	    };
+	    static descriptors = {
+	        _scriptable: true,
+	        _indexable: (name)=>name !== 'borderDash'
+	    };
+	    circumference;
+	    endAngle;
+	    fullCircles;
+	    innerRadius;
+	    outerRadius;
+	    pixelMargin;
+	    startAngle;
+	    constructor(cfg){
+	        super();
+	        this.options = undefined;
+	        this.circumference = undefined;
+	        this.startAngle = undefined;
+	        this.endAngle = undefined;
+	        this.innerRadius = undefined;
+	        this.outerRadius = undefined;
+	        this.pixelMargin = 0;
+	        this.fullCircles = 0;
+	        if (cfg) {
+	            Object.assign(this, cfg);
+	        }
+	    }
+	    inRange(chartX, chartY, useFinalPosition) {
+	        const point = this.getProps([
+	            'x',
+	            'y'
+	        ], useFinalPosition);
+	        const { angle , distance  } = getAngleFromPoint(point, {
+	            x: chartX,
+	            y: chartY
+	        });
+	        const { startAngle , endAngle , innerRadius , outerRadius , circumference  } = this.getProps([
+	            'startAngle',
+	            'endAngle',
+	            'innerRadius',
+	            'outerRadius',
+	            'circumference'
+	        ], useFinalPosition);
+	        const rAdjust = (this.options.spacing + this.options.borderWidth) / 2;
+	        const _circumference = valueOrDefault(circumference, endAngle - startAngle);
+	        const nonZeroBetween = _angleBetween(angle, startAngle, endAngle) && startAngle !== endAngle;
+	        const betweenAngles = _circumference >= TAU || nonZeroBetween;
+	        const withinRadius = _isBetween(distance, innerRadius + rAdjust, outerRadius + rAdjust);
+	        return betweenAngles && withinRadius;
+	    }
+	    getCenterPoint(useFinalPosition) {
+	        const { x , y , startAngle , endAngle , innerRadius , outerRadius  } = this.getProps([
+	            'x',
+	            'y',
+	            'startAngle',
+	            'endAngle',
+	            'innerRadius',
+	            'outerRadius'
+	        ], useFinalPosition);
+	        const { offset , spacing  } = this.options;
+	        const halfAngle = (startAngle + endAngle) / 2;
+	        const halfRadius = (innerRadius + outerRadius + spacing + offset) / 2;
+	        return {
+	            x: x + Math.cos(halfAngle) * halfRadius,
+	            y: y + Math.sin(halfAngle) * halfRadius
+	        };
+	    }
+	    tooltipPosition(useFinalPosition) {
+	        return this.getCenterPoint(useFinalPosition);
+	    }
+	    draw(ctx) {
+	        const { options , circumference  } = this;
+	        const offset = (options.offset || 0) / 4;
+	        const spacing = (options.spacing || 0) / 2;
+	        const circular = options.circular;
+	        this.pixelMargin = options.borderAlign === 'inner' ? 0.33 : 0;
+	        this.fullCircles = circumference > TAU ? Math.floor(circumference / TAU) : 0;
+	        if (circumference === 0 || this.innerRadius < 0 || this.outerRadius < 0) {
+	            return;
+	        }
+	        ctx.save();
+	        const halfAngle = (this.startAngle + this.endAngle) / 2;
+	        ctx.translate(Math.cos(halfAngle) * offset, Math.sin(halfAngle) * offset);
+	        const fix = 1 - Math.sin(Math.min(PI, circumference || 0));
+	        const radiusOffset = offset * fix;
+	        ctx.fillStyle = options.backgroundColor;
+	        ctx.strokeStyle = options.borderColor;
+	        drawArc(ctx, this, radiusOffset, spacing, circular);
+	        drawBorder(ctx, this, radiusOffset, spacing, circular);
+	        ctx.restore();
+	    }
+	}
+
 	function inRange$1(el, pos, axis, useFinalPosition) {
 	    const options = el.options;
 	    const { [axis]: value  } = el.getProps([
@@ -13153,7 +14729,7 @@ ${properties}`
 	        ctx.strokeStyle = options.borderColor;
 	        ctx.lineWidth = options.borderWidth;
 	        ctx.fillStyle = options.backgroundColor;
-	        drawPoint(ctx, options, this.x, this.y);
+	        drawPoint$1(ctx, options, this.x, this.y);
 	    }
 	    getRange() {
 	        const options = this.options || {};
@@ -13221,7 +14797,7 @@ ${properties}`
 	        bottomRight: skipOrLimit(!enableBorder || skip.bottom || skip.right, o.bottomRight, 0, maxR)
 	    };
 	}
-	function boundingRects(bar) {
+	function boundingRects$1(bar) {
 	    const bounds = getBarBounds(bar);
 	    const width = bounds.right - bounds.left;
 	    const height = bounds.bottom - bounds.top;
@@ -13302,7 +14878,7 @@ ${properties}`
 	    }
 	    draw(ctx) {
 	        const { inflateAmount , options: { borderColor , backgroundColor  }  } = this;
-	        const { inner , outer  } = boundingRects(this);
+	        const { inner , outer  } = boundingRects$1(this);
 	        const addRectPath = hasRadius(outer.radius) ? addRoundedRectPath : addNormalRectPath;
 	        ctx.save();
 	        if (outer.w !== inner.w || outer.h !== inner.h) {
@@ -13560,7 +15136,7 @@ ${properties}`
 	 _draw() {
 	        const { options: opts , columnSizes , lineWidths , ctx  } = this;
 	        const { align , labels: labelOpts  } = opts;
-	        const defaultColor = defaults.color;
+	        const defaultColor = defaults$1.color;
 	        const rtlHelper = getRtlAdapter(opts.rtl, this.left, this.width);
 	        const labelFont = toFont(labelOpts.font);
 	        const { padding  } = labelOpts;
@@ -14034,7 +15610,7 @@ ${properties}`
 	    }
 	};
 
-	const positioners = {
+	const positioners$1 = {
 	 average (items) {
 	        if (!items.length) {
 	            return false;
@@ -14349,7 +15925,7 @@ ${properties}`
 	    return result;
 	}
 	class Tooltip extends Element$1 {
-	 static positioners = positioners;
+	 static positioners = positioners$1;
 	    constructor(config){
 	        super();
 	        this.opacity = 0;
@@ -14488,7 +16064,7 @@ ${properties}`
 	                };
 	            }
 	        } else {
-	            const position = positioners[options.position].call(this, active, this._eventPosition);
+	            const position = positioners$1[options.position].call(this, active, this._eventPosition);
 	            tooltipItems = this._createItems(options);
 	            this.title = this.getTitle(tooltipItems, options);
 	            this.beforeBody = this.getBeforeBody(tooltipItems, options);
@@ -14623,10 +16199,10 @@ ${properties}`
 	            const centerY = colorY + boxHeight / 2;
 	            ctx.strokeStyle = options.multiKeyBackground;
 	            ctx.fillStyle = options.multiKeyBackground;
-	            drawPoint(ctx, drawOptions, centerX, centerY);
+	            drawPoint$1(ctx, drawOptions, centerX, centerY);
 	            ctx.strokeStyle = labelColor.borderColor;
 	            ctx.fillStyle = labelColor.backgroundColor;
-	            drawPoint(ctx, drawOptions, centerX, centerY);
+	            drawPoint$1(ctx, drawOptions, centerX, centerY);
 	        } else {
 	            ctx.lineWidth = isObject(labelColor.borderWidth) ? Math.max(...Object.values(labelColor.borderWidth)) : labelColor.borderWidth || 1;
 	            ctx.strokeStyle = labelColor.borderColor;
@@ -14769,7 +16345,7 @@ ${properties}`
 	        const animX = anims && anims.x;
 	        const animY = anims && anims.y;
 	        if (animX || animY) {
-	            const position = positioners[options.position].call(this, this._active, this._eventPosition);
+	            const position = positioners$1[options.position].call(this, this._active, this._eventPosition);
 	            if (!position) {
 	                return;
 	            }
@@ -14885,14 +16461,14 @@ ${properties}`
 	    }
 	 _positionChanged(active, e) {
 	        const { caretX , caretY , options  } = this;
-	        const position = positioners[options.position].call(this, active, e);
+	        const position = positioners$1[options.position].call(this, active, e);
 	        return position !== false && (caretX !== position.x || caretY !== position.y);
 	    }
 	}
 	var plugin_tooltip = {
 	    id: 'tooltip',
 	    _element: Tooltip,
-	    positioners,
+	    positioners: positioners$1,
 	    afterInit (chart, _args, options) {
 	        if (options) {
 	            chart.tooltip = new Tooltip({
@@ -15924,7 +17500,7 @@ ${properties}`
 
 	ImportanceChart2[FILENAME] = 'src/ce_mlflow_extension/templates/components/ImportanceChart2.svelte';
 
-	var root$4 = add_locations(from_html(`<div class="importance-chart-container"><canvas class="svelte-ec5xpb"></canvas></div>`), ImportanceChart2[FILENAME], [[243, 0, [[244, 2]]]]);
+	var root$4 = add_locations(from_html(`<div class="importance-chart-container"><canvas class="svelte-ec5xpb"></canvas></div>`), ImportanceChart2[FILENAME], [[234, 0, [[235, 2]]]]);
 
 	function ImportanceChart2($$anchor, $$props) {
 		check_target(new.target);
@@ -15934,16 +17510,6 @@ ${properties}`
 		// Props using Svelte 5 runes
 		let data = prop($$props, 'data', 19, () => []),
 			selectedLabel = prop($$props, 'selectedLabel', 15, null);
-
-		console.log(...log_if_contains_state('log', "ImportanceChart2: Loaded with data:", data(), "and selectedLabel:", selectedLabel()));
-
-		// Debug the derived values
-		user_effect(() => {
-			console.log(...log_if_contains_state('log', "ImportanceChart2: orderedData:", get(orderedData)));
-			console.log(...log_if_contains_state('log', "ImportanceChart2: totalImportance:", get(totalImportance)));
-			console.log(...log_if_contains_state('log', "ImportanceChart2: percentageData:", get(percentageData)));
-			console.log(...log_if_contains_state('log', "ImportanceChart2: displayData:", get(displayData)));
-		});
 
 		// Event dispatcher
 		const dispatch = createEventDispatcher();
@@ -16444,7 +18010,7 @@ ${properties}`
 
 	ChartManager[FILENAME] = 'src/ce_mlflow_extension/templates/components/ChartManager.svelte';
 
-	var root_1 = add_locations(from_html(`<div class="selected-info svelte-169j5gc"><p class="svelte-169j5gc"><strong>Selected Feature:</strong> </p></div>`), ChartManager[FILENAME], [[70, 4, [[71, 6, [[71, 9]]]]]]);
+	var root_1$1 = add_locations(from_html(`<div class="selected-info svelte-169j5gc"><p class="svelte-169j5gc"><strong>Selected Feature:</strong> </p></div>`), ChartManager[FILENAME], [[70, 4, [[71, 6, [[71, 9]]]]]]);
 
 	var root$2 = add_locations(from_html(`<div class="chart-manager svelte-169j5gc"><div class="charts-row svelte-169j5gc"><div class="chart-section svelte-169j5gc"><h3 class="svelte-169j5gc">Feature Importance Chart</h3> <div class="chart-container svelte-169j5gc"><!></div></div> <div class="chart-section svelte-169j5gc"><h3 class="svelte-169j5gc">SHAP Values</h3> <div class="chart-container svelte-169j5gc"><!></div></div></div> <!></div>`), ChartManager[FILENAME], [
 		[
@@ -16573,7 +18139,7 @@ ${properties}`
 
 		{
 			var consequent = ($$anchor) => {
-				var div_6 = root_1();
+				var div_6 = root_1$1();
 				var p = child(div_6);
 				var text = sibling(child(p));
 				template_effect(() => set_text(text, ` ${get(selectedLabel) ?? ''}`));
@@ -16595,166 +18161,4947 @@ ${properties}`
 		return pop({ ...legacy_api() });
 	}
 
-	ImportanceChart[FILENAME] = 'src/ce_mlflow_extension/templates/components/ImportanceChart.svelte';
+	/*!
+	* chartjs-plugin-annotation v3.1.0
+	* https://www.chartjs.org/chartjs-plugin-annotation/index
+	 * (c) 2024 chartjs-plugin-annotation Contributors
+	 * Released under the MIT License
+	 */
 
-	var root$1 = add_locations(from_html(`<div class="chart-wrapper svelte-1065j45"><canvas class="svelte-1065j45"></canvas></div>`), ImportanceChart[FILENAME], [[122, 0, [[123, 4]]]]);
+	/**
+	 * @typedef { import("chart.js").ChartEvent } ChartEvent
+	 * @typedef { import('../../types/element').AnnotationElement } AnnotationElement
+	 */
 
-	function ImportanceChart($$anchor, $$props) {
+	const interaction = {
+	  modes: {
+	    /**
+	     * Point mode returns all elements that hit test based on the event position
+	     * @param {AnnotationElement[]} visibleElements - annotation elements which are visible
+	     * @param {ChartEvent} event - the event we are find things at
+	     * @return {AnnotationElement[]} - elements that are found
+	     */
+	    point(visibleElements, event) {
+	      return filterElements(visibleElements, event, {intersect: true});
+	    },
+
+	    /**
+	     * Nearest mode returns the element closest to the event position
+	     * @param {AnnotationElement[]} visibleElements - annotation elements which are visible
+	     * @param {ChartEvent} event - the event we are find things at
+	     * @param {Object} options - interaction options to use
+	     * @return {AnnotationElement[]} - elements that are found (only 1 element)
+	     */
+	    nearest(visibleElements, event, options) {
+	      return getNearestItem(visibleElements, event, options);
+	    },
+	    /**
+	     * x mode returns the elements that hit-test at the current x coordinate
+	     * @param {AnnotationElement[]} visibleElements - annotation elements which are visible
+	     * @param {ChartEvent} event - the event we are find things at
+	     * @param {Object} options - interaction options to use
+	     * @return {AnnotationElement[]} - elements that are found
+	     */
+	    x(visibleElements, event, options) {
+	      return filterElements(visibleElements, event, {intersect: options.intersect, axis: 'x'});
+	    },
+
+	    /**
+	     * y mode returns the elements that hit-test at the current y coordinate
+	     * @param {AnnotationElement[]} visibleElements - annotation elements which are visible
+	     * @param {ChartEvent} event - the event we are find things at
+	     * @param {Object} options - interaction options to use
+	     * @return {AnnotationElement[]} - elements that are found
+	     */
+	    y(visibleElements, event, options) {
+	      return filterElements(visibleElements, event, {intersect: options.intersect, axis: 'y'});
+	    }
+	  }
+	};
+
+	/**
+	 * Returns all elements that hit test based on the event position
+	 * @param {AnnotationElement[]} visibleElements - annotation elements which are visible
+	 * @param {ChartEvent} event - the event we are find things at
+	 * @param {Object} options - interaction options to use
+	 * @return {AnnotationElement[]} - elements that are found
+	 */
+	function getElements(visibleElements, event, options) {
+	  const mode = interaction.modes[options.mode] || interaction.modes.nearest;
+	  return mode(visibleElements, event, options);
+	}
+
+	function inRangeByAxis(element, event, axis) {
+	  if (axis !== 'x' && axis !== 'y') {
+	    return element.inRange(event.x, event.y, 'x', true) || element.inRange(event.x, event.y, 'y', true);
+	  }
+	  return element.inRange(event.x, event.y, axis, true);
+	}
+
+	function getPointByAxis(event, center, axis) {
+	  if (axis === 'x') {
+	    return {x: event.x, y: center.y};
+	  } else if (axis === 'y') {
+	    return {x: center.x, y: event.y};
+	  }
+	  return center;
+	}
+
+	function filterElements(visibleElements, event, options) {
+	  return visibleElements.filter((element) => options.intersect ? element.inRange(event.x, event.y) : inRangeByAxis(element, event, options.axis));
+	}
+
+	function getNearestItem(visibleElements, event, options) {
+	  let minDistance = Number.POSITIVE_INFINITY;
+
+	  return filterElements(visibleElements, event, options)
+	    .reduce((nearestItems, element) => {
+	      const center = element.getCenterPoint();
+	      const evenPoint = getPointByAxis(event, center, options.axis);
+	      const distance = distanceBetweenPoints(event, evenPoint);
+	      if (distance < minDistance) {
+	        nearestItems = [element];
+	        minDistance = distance;
+	      } else if (distance === minDistance) {
+	        // Can have multiple items at the same distance in which case we sort by size
+	        nearestItems.push(element);
+	      }
+
+	      return nearestItems;
+	    }, [])
+	    .sort((a, b) => a._index - b._index)
+	    .slice(0, 1); // return only the top item;
+	}
+
+	/**
+	 * @typedef {import('chart.js').Point} Point
+	 */
+
+	/**
+	 * Rotate a `point` relative to `center` point by `angle`
+	 * @param {Point} point - the point to rotate
+	 * @param {Point} center - center point for rotation
+	 * @param {number} angle - angle for rotation, in radians
+	 * @returns {Point} rotated point
+	 */
+	function rotated$1(point, center, angle) {
+	  const cos = Math.cos(angle);
+	  const sin = Math.sin(angle);
+	  const cx = center.x;
+	  const cy = center.y;
+
+	  return {
+	    x: cx + cos * (point.x - cx) - sin * (point.y - cy),
+	    y: cy + sin * (point.x - cx) + cos * (point.y - cy)
+	  };
+	}
+
+	const isOlderPart = (act, req) => req > act || (act.length > req.length && act.slice(0, req.length) === req);
+
+	/**
+	 * @typedef { import('chart.js').Point } Point
+	 * @typedef { import('chart.js').InteractionAxis } InteractionAxis
+	 * @typedef { import('../../types/element').AnnotationElement } AnnotationElement
+	 */
+
+	const EPSILON = 0.001;
+	const clamp = (x, from, to) => Math.min(to, Math.max(from, x));
+
+	/**
+	 * @param {{value: number, start: number, end: number}} limit
+	 * @param {number} hitSize
+	 * @returns {boolean}
+	 */
+	const inLimit = (limit, hitSize) => limit.value >= limit.start - hitSize && limit.value <= limit.end + hitSize;
+
+	/**
+	 * @param {Object} obj
+	 * @param {number} from
+	 * @param {number} to
+	 * @returns {Object}
+	 */
+	function clampAll(obj, from, to) {
+	  for (const key of Object.keys(obj)) {
+	    obj[key] = clamp(obj[key], from, to);
+	  }
+	  return obj;
+	}
+
+	/**
+	 * @param {Point} point
+	 * @param {Point} center
+	 * @param {number} radius
+	 * @param {number} hitSize
+	 * @returns {boolean}
+	 */
+	function inPointRange(point, center, radius, hitSize) {
+	  if (!point || !center || radius <= 0) {
+	    return false;
+	  }
+	  return (Math.pow(point.x - center.x, 2) + Math.pow(point.y - center.y, 2)) <= Math.pow(radius + hitSize, 2);
+	}
+
+	/**
+	 * @param {Point} point
+	 * @param {{x: number, y: number, x2: number, y2: number}} rect
+	 * @param {InteractionAxis} axis
+	 * @param {{borderWidth: number, hitTolerance: number}} hitsize
+	 * @returns {boolean}
+	 */
+	function inBoxRange(point, {x, y, x2, y2}, axis, {borderWidth, hitTolerance}) {
+	  const hitSize = (borderWidth + hitTolerance) / 2;
+	  const inRangeX = point.x >= x - hitSize - EPSILON && point.x <= x2 + hitSize + EPSILON;
+	  const inRangeY = point.y >= y - hitSize - EPSILON && point.y <= y2 + hitSize + EPSILON;
+	  if (axis === 'x') {
+	    return inRangeX;
+	  } else if (axis === 'y') {
+	    return inRangeY;
+	  }
+	  return inRangeX && inRangeY;
+	}
+
+	/**
+	 * @param {Point} point
+	 * @param {rect: {x: number, y: number, x2: number, y2: number}, center: {x: number, y: number}} element
+	 * @param {InteractionAxis} axis
+	 * @param {{rotation: number, borderWidth: number, hitTolerance: number}}
+	 * @returns {boolean}
+	 */
+	function inLabelRange(point, {rect, center}, axis, {rotation, borderWidth, hitTolerance}) {
+	  const rotPoint = rotated$1(point, center, toRadians(-rotation));
+	  return inBoxRange(rotPoint, rect, axis, {borderWidth, hitTolerance});
+	}
+
+	/**
+	 * @param {AnnotationElement} element
+	 * @param {boolean} useFinalPosition
+	 * @returns {Point}
+	 */
+	function getElementCenterPoint(element, useFinalPosition) {
+	  const {centerX, centerY} = element.getProps(['centerX', 'centerY'], useFinalPosition);
+	  return {x: centerX, y: centerY};
+	}
+
+	/**
+	 * @param {string} pkg
+	 * @param {string} min
+	 * @param {string} ver
+	 * @param {boolean} [strict=true]
+	 * @returns {boolean}
+	 */
+	function requireVersion(pkg, min, ver, strict = true) {
+	  const parts = ver.split('.');
+	  let i = 0;
+	  for (const req of min.split('.')) {
+	    const act = parts[i++];
+	    if (parseInt(req, 10) < parseInt(act, 10)) {
+	      break;
+	    }
+	    if (isOlderPart(act, req)) {
+	      if (strict) {
+	        throw new Error(`${pkg} v${ver} is not supported. v${min} or newer is required.`);
+	      } else {
+	        return false;
+	      }
+	    }
+	  }
+	  return true;
+	}
+
+	const isPercentString = (s) => typeof s === 'string' && s.endsWith('%');
+	const toPercent = (s) => parseFloat(s) / 100;
+	const toPositivePercent = (s) => clamp(toPercent(s), 0, 1);
+
+	const boxAppering = (x, y) => ({x, y, x2: x, y2: y, width: 0, height: 0});
+	const defaultInitAnimation = {
+	  box: (properties) => boxAppering(properties.centerX, properties.centerY),
+	  doughnutLabel: (properties) => boxAppering(properties.centerX, properties.centerY),
+	  ellipse: (properties) => ({centerX: properties.centerX, centerY: properties.centerX, radius: 0, width: 0, height: 0}),
+	  label: (properties) => boxAppering(properties.centerX, properties.centerY),
+	  line: (properties) => boxAppering(properties.x, properties.y),
+	  point: (properties) => ({centerX: properties.centerX, centerY: properties.centerY, radius: 0, width: 0, height: 0}),
+	  polygon: (properties) => boxAppering(properties.centerX, properties.centerY)
+	};
+
+	/**
+	 * @typedef { import('chart.js').FontSpec } FontSpec
+	 * @typedef { import('chart.js').Point } Point
+	 * @typedef { import('chart.js').Padding } Padding
+	 * @typedef { import('../../types/element').AnnotationBoxModel } AnnotationBoxModel
+	 * @typedef { import('../../types/element').AnnotationElement } AnnotationElement
+	 * @typedef { import('../../types/options').AnnotationPointCoordinates } AnnotationPointCoordinates
+	 * @typedef { import('../../types/label').CoreLabelOptions } CoreLabelOptions
+	 * @typedef { import('../../types/label').LabelPositionObject } LabelPositionObject
+	 */
+
+	/**
+	 * @param {number} size
+	 * @param {number|string} position
+	 * @returns {number}
+	 */
+	function getRelativePosition(size, position) {
+	  if (position === 'start') {
+	    return 0;
+	  }
+	  if (position === 'end') {
+	    return size;
+	  }
+	  if (isPercentString(position)) {
+	    return toPositivePercent(position) * size;
+	  }
+	  return size / 2;
+	}
+
+	/**
+	 * @param {number} size
+	 * @param {number|string} value
+	 * @param {boolean} [positivePercent=true]
+	 * @returns {number}
+	 */
+	function getSize(size, value, positivePercent = true) {
+	  if (typeof value === 'number') {
+	    return value;
+	  } else if (isPercentString(value)) {
+	    return (positivePercent ? toPositivePercent(value) : toPercent(value)) * size;
+	  }
+	  return size;
+	}
+
+	/**
+	 * @param {{x: number, width: number}} size
+	 * @param {CoreLabelOptions} options
+	 * @returns {number}
+	 */
+	function calculateTextAlignment(size, options) {
+	  const {x, width} = size;
+	  const textAlign = options.textAlign;
+	  if (textAlign === 'center') {
+	    return x + width / 2;
+	  } else if (textAlign === 'end' || textAlign === 'right') {
+	    return x + width;
+	  }
+	  return x;
+	}
+
+	/**
+	 * @param {Point} point
+	 * @param {{height: number, width: number}} labelSize
+	 * @param {{borderWidth: number, position: {LabelPositionObject|string}, xAdjust: number, yAdjust: number}} options
+	 * @param {Padding|undefined} padding
+	 * @returns {{x: number, y: number, x2: number, y2: number, height: number, width: number, centerX: number, centerY: number}}
+	 */
+	function measureLabelRectangle(point, labelSize, {borderWidth, position, xAdjust, yAdjust}, padding) {
+	  const hasPadding = isObject(padding);
+	  const width = labelSize.width + (hasPadding ? padding.width : 0) + borderWidth;
+	  const height = labelSize.height + (hasPadding ? padding.height : 0) + borderWidth;
+	  const positionObj = toPosition(position);
+	  const x = calculateLabelPosition$1(point.x, width, xAdjust, positionObj.x);
+	  const y = calculateLabelPosition$1(point.y, height, yAdjust, positionObj.y);
+
+	  return {
+	    x,
+	    y,
+	    x2: x + width,
+	    y2: y + height,
+	    width,
+	    height,
+	    centerX: x + width / 2,
+	    centerY: y + height / 2
+	  };
+	}
+
+	/**
+	 * @param {LabelPositionObject|string} value
+	 * @param {string|number} defaultValue
+	 * @returns {LabelPositionObject}
+	 */
+	function toPosition(value, defaultValue = 'center') {
+	  if (isObject(value)) {
+	    return {
+	      x: valueOrDefault(value.x, defaultValue),
+	      y: valueOrDefault(value.y, defaultValue),
+	    };
+	  }
+	  value = valueOrDefault(value, defaultValue);
+	  return {
+	    x: value,
+	    y: value
+	  };
+	}
+
+	/**
+	 * @param {CoreLabelOptions} options
+	 * @param {number} fitRatio
+	 * @returns {boolean}
+	 */
+	const shouldFit = (options, fitRatio) => options && options.autoFit && fitRatio < 1;
+
+	/**
+	 * @param {CoreLabelOptions} options
+	 * @param {number} fitRatio
+	 * @returns {FontSpec[]}
+	 */
+	function toFonts(options, fitRatio) {
+	  const optFont = options.font;
+	  const fonts = isArray(optFont) ? optFont : [optFont];
+	  if (shouldFit(options, fitRatio)) {
+	    return fonts.map(function(f) {
+	      const font = toFont(f);
+	      font.size = Math.floor(f.size * fitRatio);
+	      font.lineHeight = f.lineHeight;
+	      return toFont(font);
+	    });
+	  }
+	  return fonts.map(f => toFont(f));
+	}
+
+	/**
+	 * @param {AnnotationPointCoordinates} options
+	 * @returns {boolean}
+	 */
+	function isBoundToPoint(options) {
+	  return options && (defined(options.xValue) || defined(options.yValue));
+	}
+
+	function calculateLabelPosition$1(start, size, adjust = 0, position) {
+	  return start - getRelativePosition(size, position) + adjust;
+	}
+
+	/**
+	 * @param {Chart} chart
+	 * @param {AnnotationBoxModel} properties
+	 * @param {CoreAnnotationOptions} options
+	 * @returns {AnnotationElement}
+	 */
+	function initAnimationProperties(chart, properties, options) {
+	  const initAnim = options.init;
+	  if (!initAnim) {
+	    return;
+	  } else if (initAnim === true) {
+	    return applyDefault(properties, options);
+	  }
+	  return execCallback(chart, properties, options);
+	}
+
+	/**
+	 * @param {Object} options
+	 * @param {Array} hooks
+	 * @param {Object} hooksContainer
+	 * @returns {boolean}
+	 */
+	function loadHooks(options, hooks, hooksContainer) {
+	  let activated = false;
+	  hooks.forEach(hook => {
+	    if (isFunction(options[hook])) {
+	      activated = true;
+	      hooksContainer[hook] = options[hook];
+	    } else if (defined(hooksContainer[hook])) {
+	      delete hooksContainer[hook];
+	    }
+	  });
+	  return activated;
+	}
+
+	function applyDefault(properties, options) {
+	  const type = options.type || 'line';
+	  return defaultInitAnimation[type](properties);
+	}
+
+	function execCallback(chart, properties, options) {
+	  const result = callback(options.init, [{chart, properties, options}]);
+	  if (result === true) {
+	    return applyDefault(properties, options);
+	  } else if (isObject(result)) {
+	    return result;
+	  }
+	}
+
+	const widthCache = new Map();
+	const notRadius = (radius) => isNaN(radius) || radius <= 0;
+	const fontsKey = (fonts) => fonts.reduce(function(prev, item) {
+	  prev += item.string;
+	  return prev;
+	}, '');
+
+	/**
+	 * @typedef { import('chart.js').Point } Point
+	 * @typedef { import('../../types/label').CoreLabelOptions } CoreLabelOptions
+	 * @typedef { import('../../types/options').PointAnnotationOptions } PointAnnotationOptions
+	 */
+
+	/**
+	 * Determine if content is an image or a canvas.
+	 * @param {*} content
+	 * @returns boolean|undefined
+	 * @todo move this function to chart.js helpers
+	 */
+	function isImageOrCanvas(content) {
+	  if (content && typeof content === 'object') {
+	    const type = content.toString();
+	    return (type === '[object HTMLImageElement]' || type === '[object HTMLCanvasElement]');
+	  }
+	}
+
+	/**
+	 * Set the translation on the canvas if the rotation must be applied.
+	 * @param {CanvasRenderingContext2D} ctx - chart canvas context
+	 * @param {Point} point - the point of translation
+	 * @param {number} rotation - rotation (in degrees) to apply
+	 */
+	function translate(ctx, {x, y}, rotation) {
+	  if (rotation) {
+	    ctx.translate(x, y);
+	    ctx.rotate(toRadians(rotation));
+	    ctx.translate(-x, -y);
+	  }
+	}
+
+	/**
+	 * @param {CanvasRenderingContext2D} ctx
+	 * @param {Object} options
+	 * @returns {boolean|undefined}
+	 */
+	function setBorderStyle(ctx, options) {
+	  if (options && options.borderWidth) {
+	    ctx.lineCap = options.borderCapStyle || 'butt';
+	    ctx.setLineDash(options.borderDash);
+	    ctx.lineDashOffset = options.borderDashOffset;
+	    ctx.lineJoin = options.borderJoinStyle || 'miter';
+	    ctx.lineWidth = options.borderWidth;
+	    ctx.strokeStyle = options.borderColor;
+	    return true;
+	  }
+	}
+
+	/**
+	 * @param {CanvasRenderingContext2D} ctx
+	 * @param {Object} options
+	 */
+	function setShadowStyle(ctx, options) {
+	  ctx.shadowColor = options.backgroundShadowColor;
+	  ctx.shadowBlur = options.shadowBlur;
+	  ctx.shadowOffsetX = options.shadowOffsetX;
+	  ctx.shadowOffsetY = options.shadowOffsetY;
+	}
+
+	/**
+	 * @param {CanvasRenderingContext2D} ctx
+	 * @param {CoreLabelOptions} options
+	 * @returns {{width: number, height: number}}
+	 */
+	function measureLabelSize(ctx, options) {
+	  const content = options.content;
+	  if (isImageOrCanvas(content)) {
+	    const size = {
+	      width: getSize(content.width, options.width),
+	      height: getSize(content.height, options.height)
+	    };
+	    return size;
+	  }
+	  const fonts = toFonts(options);
+	  const strokeWidth = options.textStrokeWidth;
+	  const lines = isArray(content) ? content : [content];
+	  const mapKey = lines.join() + fontsKey(fonts) + strokeWidth + (ctx._measureText ? '-spriting' : '');
+	  if (!widthCache.has(mapKey)) {
+	    widthCache.set(mapKey, calculateLabelSize(ctx, lines, fonts, strokeWidth));
+	  }
+	  return widthCache.get(mapKey);
+	}
+
+	/**
+	 * @param {CanvasRenderingContext2D} ctx
+	 * @param {{x: number, y: number, width: number, height: number}} rect
+	 * @param {Object} options
+	 */
+	function drawBox(ctx, rect, options) {
+	  const {x, y, width, height} = rect;
+	  ctx.save();
+	  setShadowStyle(ctx, options);
+	  const stroke = setBorderStyle(ctx, options);
+	  ctx.fillStyle = options.backgroundColor;
+	  ctx.beginPath();
+	  addRoundedRectPath(ctx, {
+	    x, y, w: width, h: height,
+	    radius: clampAll(toTRBLCorners(options.borderRadius), 0, Math.min(width, height) / 2)
+	  });
+	  ctx.closePath();
+	  ctx.fill();
+	  if (stroke) {
+	    ctx.shadowColor = options.borderShadowColor;
+	    ctx.stroke();
+	  }
+	  ctx.restore();
+	}
+
+	/**
+	 * @param {CanvasRenderingContext2D} ctx
+	 * @param {{x: number, y: number, width: number, height: number}} rect
+	 * @param {CoreLabelOptions} options
+	 * @param {number} fitRatio
+	 */
+	function drawLabel(ctx, rect, options, fitRatio) {
+	  const content = options.content;
+	  if (isImageOrCanvas(content)) {
+	    ctx.save();
+	    ctx.globalAlpha = getOpacity(options.opacity, content.style.opacity);
+	    ctx.drawImage(content, rect.x, rect.y, rect.width, rect.height);
+	    ctx.restore();
+	    return;
+	  }
+	  const labels = isArray(content) ? content : [content];
+	  const fonts = toFonts(options, fitRatio);
+	  const optColor = options.color;
+	  const colors = isArray(optColor) ? optColor : [optColor];
+	  const x = calculateTextAlignment(rect, options);
+	  const y = rect.y + options.textStrokeWidth / 2;
+	  ctx.save();
+	  ctx.textBaseline = 'middle';
+	  ctx.textAlign = options.textAlign;
+	  if (setTextStrokeStyle(ctx, options)) {
+	    applyLabelDecoration(ctx, {x, y}, labels, fonts);
+	  }
+	  applyLabelContent(ctx, {x, y}, labels, {fonts, colors});
+	  ctx.restore();
+	}
+
+	function setTextStrokeStyle(ctx, options) {
+	  if (options.textStrokeWidth > 0) {
+	    // https://stackoverflow.com/questions/13627111/drawing-text-with-an-outer-stroke-with-html5s-canvas
+	    ctx.lineJoin = 'round';
+	    ctx.miterLimit = 2;
+	    ctx.lineWidth = options.textStrokeWidth;
+	    ctx.strokeStyle = options.textStrokeColor;
+	    return true;
+	  }
+	}
+
+	/**
+	 * @param {CanvasRenderingContext2D} ctx
+	 * @param {{radius: number, options: PointAnnotationOptions}} element
+	 * @param {number} x
+	 * @param {number} y
+	 */
+	function drawPoint(ctx, element, x, y) {
+	  const {radius, options} = element;
+	  const style = options.pointStyle;
+	  const rotation = options.rotation;
+	  let rad = (rotation || 0) * RAD_PER_DEG;
+
+	  if (isImageOrCanvas(style)) {
+	    ctx.save();
+	    ctx.translate(x, y);
+	    ctx.rotate(rad);
+	    ctx.drawImage(style, -style.width / 2, -style.height / 2, style.width, style.height);
+	    ctx.restore();
+	    return;
+	  }
+	  if (notRadius(radius)) {
+	    return;
+	  }
+	  drawPointStyle(ctx, {x, y, radius, rotation, style, rad});
+	}
+
+	function drawPointStyle(ctx, {x, y, radius, rotation, style, rad}) {
+	  let xOffset, yOffset, size, cornerRadius;
+	  ctx.beginPath();
+
+	  switch (style) {
+	  // Default includes circle
+	  default:
+	    ctx.arc(x, y, radius, 0, TAU);
+	    ctx.closePath();
+	    break;
+	  case 'triangle':
+	    ctx.moveTo(x + Math.sin(rad) * radius, y - Math.cos(rad) * radius);
+	    rad += TWO_THIRDS_PI;
+	    ctx.lineTo(x + Math.sin(rad) * radius, y - Math.cos(rad) * radius);
+	    rad += TWO_THIRDS_PI;
+	    ctx.lineTo(x + Math.sin(rad) * radius, y - Math.cos(rad) * radius);
+	    ctx.closePath();
+	    break;
+	  case 'rectRounded':
+	    // NOTE: the rounded rect implementation changed to use `arc` instead of
+	    // `quadraticCurveTo` since it generates better results when rect is
+	    // almost a circle. 0.516 (instead of 0.5) produces results with visually
+	    // closer proportion to the previous impl and it is inscribed in the
+	    // circle with `radius`. For more details, see the following PRs:
+	    // https://github.com/chartjs/Chart.js/issues/5597
+	    // https://github.com/chartjs/Chart.js/issues/5858
+	    cornerRadius = radius * 0.516;
+	    size = radius - cornerRadius;
+	    xOffset = Math.cos(rad + QUARTER_PI) * size;
+	    yOffset = Math.sin(rad + QUARTER_PI) * size;
+	    ctx.arc(x - xOffset, y - yOffset, cornerRadius, rad - PI, rad - HALF_PI);
+	    ctx.arc(x + yOffset, y - xOffset, cornerRadius, rad - HALF_PI, rad);
+	    ctx.arc(x + xOffset, y + yOffset, cornerRadius, rad, rad + HALF_PI);
+	    ctx.arc(x - yOffset, y + xOffset, cornerRadius, rad + HALF_PI, rad + PI);
+	    ctx.closePath();
+	    break;
+	  case 'rect':
+	    if (!rotation) {
+	      size = Math.SQRT1_2 * radius;
+	      ctx.rect(x - size, y - size, 2 * size, 2 * size);
+	      break;
+	    }
+	    rad += QUARTER_PI;
+	    /* falls through */
+	  case 'rectRot':
+	    xOffset = Math.cos(rad) * radius;
+	    yOffset = Math.sin(rad) * radius;
+	    ctx.moveTo(x - xOffset, y - yOffset);
+	    ctx.lineTo(x + yOffset, y - xOffset);
+	    ctx.lineTo(x + xOffset, y + yOffset);
+	    ctx.lineTo(x - yOffset, y + xOffset);
+	    ctx.closePath();
+	    break;
+	  case 'crossRot':
+	    rad += QUARTER_PI;
+	    /* falls through */
+	  case 'cross':
+	    xOffset = Math.cos(rad) * radius;
+	    yOffset = Math.sin(rad) * radius;
+	    ctx.moveTo(x - xOffset, y - yOffset);
+	    ctx.lineTo(x + xOffset, y + yOffset);
+	    ctx.moveTo(x + yOffset, y - xOffset);
+	    ctx.lineTo(x - yOffset, y + xOffset);
+	    break;
+	  case 'star':
+	    xOffset = Math.cos(rad) * radius;
+	    yOffset = Math.sin(rad) * radius;
+	    ctx.moveTo(x - xOffset, y - yOffset);
+	    ctx.lineTo(x + xOffset, y + yOffset);
+	    ctx.moveTo(x + yOffset, y - xOffset);
+	    ctx.lineTo(x - yOffset, y + xOffset);
+	    rad += QUARTER_PI;
+	    xOffset = Math.cos(rad) * radius;
+	    yOffset = Math.sin(rad) * radius;
+	    ctx.moveTo(x - xOffset, y - yOffset);
+	    ctx.lineTo(x + xOffset, y + yOffset);
+	    ctx.moveTo(x + yOffset, y - xOffset);
+	    ctx.lineTo(x - yOffset, y + xOffset);
+	    break;
+	  case 'line':
+	    xOffset = Math.cos(rad) * radius;
+	    yOffset = Math.sin(rad) * radius;
+	    ctx.moveTo(x - xOffset, y - yOffset);
+	    ctx.lineTo(x + xOffset, y + yOffset);
+	    break;
+	  case 'dash':
+	    ctx.moveTo(x, y);
+	    ctx.lineTo(x + Math.cos(rad) * radius, y + Math.sin(rad) * radius);
+	    break;
+	  }
+
+	  ctx.fill();
+	}
+
+	function calculateLabelSize(ctx, lines, fonts, strokeWidth) {
+	  ctx.save();
+	  const count = lines.length;
+	  let width = 0;
+	  let height = strokeWidth;
+	  for (let i = 0; i < count; i++) {
+	    const font = fonts[Math.min(i, fonts.length - 1)];
+	    ctx.font = font.string;
+	    const text = lines[i];
+	    width = Math.max(width, ctx.measureText(text).width + strokeWidth);
+	    height += font.lineHeight;
+	  }
+	  ctx.restore();
+	  return {width, height};
+	}
+
+	function applyLabelDecoration(ctx, {x, y}, labels, fonts) {
+	  ctx.beginPath();
+	  let lhs = 0;
+	  labels.forEach(function(l, i) {
+	    const f = fonts[Math.min(i, fonts.length - 1)];
+	    const lh = f.lineHeight;
+	    ctx.font = f.string;
+	    ctx.strokeText(l, x, y + lh / 2 + lhs);
+	    lhs += lh;
+	  });
+	  ctx.stroke();
+	}
+
+	function applyLabelContent(ctx, {x, y}, labels, {fonts, colors}) {
+	  let lhs = 0;
+	  labels.forEach(function(l, i) {
+	    const c = colors[Math.min(i, colors.length - 1)];
+	    const f = fonts[Math.min(i, fonts.length - 1)];
+	    const lh = f.lineHeight;
+	    ctx.beginPath();
+	    ctx.font = f.string;
+	    ctx.fillStyle = c;
+	    ctx.fillText(l, x, y + lh / 2 + lhs);
+	    lhs += lh;
+	    ctx.fill();
+	  });
+	}
+
+	function getOpacity(value, elementValue) {
+	  const opacity = isNumber(value) ? value : elementValue;
+	  return isNumber(opacity) ? clamp(opacity, 0, 1) : 1;
+	}
+
+	const positions = ['left', 'bottom', 'top', 'right'];
+
+	/**
+	 * @typedef { import('../../types/element').AnnotationElement } AnnotationElement
+	 */
+
+	/**
+	 * Drawa the callout component for labels.
+	 * @param {CanvasRenderingContext2D} ctx - chart canvas context
+	 * @param {AnnotationElement} element - the label element
+	 */
+	function drawCallout(ctx, element) {
+	  const {pointX, pointY, options} = element;
+	  const callout = options.callout;
+	  const calloutPosition = callout && callout.display && resolveCalloutPosition(element, callout);
+	  if (!calloutPosition || isPointInRange(element, callout, calloutPosition)) {
+	    return;
+	  }
+
+	  ctx.save();
+	  ctx.beginPath();
+	  const stroke = setBorderStyle(ctx, callout);
+	  if (!stroke) {
+	    return ctx.restore();
+	  }
+	  const {separatorStart, separatorEnd} = getCalloutSeparatorCoord(element, calloutPosition);
+	  const {sideStart, sideEnd} = getCalloutSideCoord(element, calloutPosition, separatorStart);
+	  if (callout.margin > 0 || options.borderWidth === 0) {
+	    ctx.moveTo(separatorStart.x, separatorStart.y);
+	    ctx.lineTo(separatorEnd.x, separatorEnd.y);
+	  }
+	  ctx.moveTo(sideStart.x, sideStart.y);
+	  ctx.lineTo(sideEnd.x, sideEnd.y);
+	  const rotatedPoint = rotated$1({x: pointX, y: pointY}, element.getCenterPoint(), toRadians(-element.rotation));
+	  ctx.lineTo(rotatedPoint.x, rotatedPoint.y);
+	  ctx.stroke();
+	  ctx.restore();
+	}
+
+	function getCalloutSeparatorCoord(element, position) {
+	  const {x, y, x2, y2} = element;
+	  const adjust = getCalloutSeparatorAdjust(element, position);
+	  let separatorStart, separatorEnd;
+	  if (position === 'left' || position === 'right') {
+	    separatorStart = {x: x + adjust, y};
+	    separatorEnd = {x: separatorStart.x, y: y2};
+	  } else {
+	    //  position 'top' or 'bottom'
+	    separatorStart = {x, y: y + adjust};
+	    separatorEnd = {x: x2, y: separatorStart.y};
+	  }
+	  return {separatorStart, separatorEnd};
+	}
+
+	function getCalloutSeparatorAdjust(element, position) {
+	  const {width, height, options} = element;
+	  const adjust = options.callout.margin + options.borderWidth / 2;
+	  if (position === 'right') {
+	    return width + adjust;
+	  } else if (position === 'bottom') {
+	    return height + adjust;
+	  }
+	  return -adjust;
+	}
+
+	function getCalloutSideCoord(element, position, separatorStart) {
+	  const {y, width, height, options} = element;
+	  const start = options.callout.start;
+	  const side = getCalloutSideAdjust(position, options.callout);
+	  let sideStart, sideEnd;
+	  if (position === 'left' || position === 'right') {
+	    sideStart = {x: separatorStart.x, y: y + getSize(height, start)};
+	    sideEnd = {x: sideStart.x + side, y: sideStart.y};
+	  } else {
+	    //  position 'top' or 'bottom'
+	    sideStart = {x: separatorStart.x + getSize(width, start), y: separatorStart.y};
+	    sideEnd = {x: sideStart.x, y: sideStart.y + side};
+	  }
+	  return {sideStart, sideEnd};
+	}
+
+	function getCalloutSideAdjust(position, options) {
+	  const side = options.side;
+	  if (position === 'left' || position === 'top') {
+	    return -side;
+	  }
+	  return side;
+	}
+
+	function resolveCalloutPosition(element, options) {
+	  const position = options.position;
+	  if (positions.includes(position)) {
+	    return position;
+	  }
+	  return resolveCalloutAutoPosition(element, options);
+	}
+
+	function resolveCalloutAutoPosition(element, options) {
+	  const {x, y, x2, y2, width, height, pointX, pointY, centerX, centerY, rotation} = element;
+	  const center = {x: centerX, y: centerY};
+	  const start = options.start;
+	  const xAdjust = getSize(width, start);
+	  const yAdjust = getSize(height, start);
+	  const xPoints = [x, x + xAdjust, x + xAdjust, x2];
+	  const yPoints = [y + yAdjust, y2, y, y2];
+	  const result = [];
+	  for (let index = 0; index < 4; index++) {
+	    const rotatedPoint = rotated$1({x: xPoints[index], y: yPoints[index]}, center, toRadians(rotation));
+	    result.push({
+	      position: positions[index],
+	      distance: distanceBetweenPoints(rotatedPoint, {x: pointX, y: pointY})
+	    });
+	  }
+	  return result.sort((a, b) => a.distance - b.distance)[0].position;
+	}
+
+	function isPointInRange(element, callout, position) {
+	  const {pointX, pointY} = element;
+	  const margin = callout.margin;
+	  let x = pointX;
+	  let y = pointY;
+	  if (position === 'left') {
+	    x += margin;
+	  } else if (position === 'right') {
+	    x -= margin;
+	  } else if (position === 'top') {
+	    y += margin;
+	  } else if (position === 'bottom') {
+	    y -= margin;
+	  }
+	  return element.inRange(x, y);
+	}
+
+	const limitedLineScale = {
+	  xScaleID: {min: 'xMin', max: 'xMax', start: 'left', end: 'right', startProp: 'x', endProp: 'x2'},
+	  yScaleID: {min: 'yMin', max: 'yMax', start: 'bottom', end: 'top', startProp: 'y', endProp: 'y2'}
+	};
+
+	/**
+	 * @typedef { import("chart.js").Chart } Chart
+	 * @typedef { import("chart.js").Scale } Scale
+	 * @typedef { import("chart.js").Point } Point
+	 * @typedef { import('../../types/element').AnnotationBoxModel } AnnotationBoxModel
+	 * @typedef { import('../../types/options').CoreAnnotationOptions } CoreAnnotationOptions
+	 * @typedef { import('../../types/options').LineAnnotationOptions } LineAnnotationOptions
+	 * @typedef { import('../../types/options').PointAnnotationOptions } PointAnnotationOptions
+	 * @typedef { import('../../types/options').PolygonAnnotationOptions } PolygonAnnotationOptions
+	 */
+
+	/**
+	 * @param {Scale} scale
+	 * @param {number|string} value
+	 * @param {number} fallback
+	 * @returns {number}
+	 */
+	function scaleValue(scale, value, fallback) {
+	  value = typeof value === 'number' ? value : scale.parse(value);
+	  return isNumberFinite(value) ? scale.getPixelForValue(value) : fallback;
+	}
+
+	/**
+	 * Search the scale defined in chartjs by the axis related to the annotation options key.
+	 * @param {{ [key: string]: Scale }} scales
+	 * @param {CoreAnnotationOptions} options
+	 * @param {string} key
+	 * @returns {string}
+	 */
+	function retrieveScaleID(scales, options, key) {
+	  const scaleID = options[key];
+	  if (scaleID || key === 'scaleID') {
+	    return scaleID;
+	  }
+	  const axis = key.charAt(0);
+	  const axes = Object.values(scales).filter((scale) => scale.axis && scale.axis === axis);
+	  if (axes.length) {
+	    return axes[0].id;
+	  }
+	  return axis;
+	}
+
+	/**
+	 * @param {Scale} scale
+	 * @param {{min: number, max: number, start: number, end: number}} options
+	 * @returns {{start: number, end: number}|undefined}
+	 */
+	function getDimensionByScale(scale, options) {
+	  if (scale) {
+	    const reverse = scale.options.reverse;
+	    const start = scaleValue(scale, options.min, reverse ? options.end : options.start);
+	    const end = scaleValue(scale, options.max, reverse ? options.start : options.end);
+	    return {
+	      start,
+	      end
+	    };
+	  }
+	}
+
+	/**
+	 * @param {Chart} chart
+	 * @param {CoreAnnotationOptions} options
+	 * @returns {Point}
+	 */
+	function getChartPoint(chart, options) {
+	  const {chartArea, scales} = chart;
+	  const xScale = scales[retrieveScaleID(scales, options, 'xScaleID')];
+	  const yScale = scales[retrieveScaleID(scales, options, 'yScaleID')];
+	  let x = chartArea.width / 2;
+	  let y = chartArea.height / 2;
+
+	  if (xScale) {
+	    x = scaleValue(xScale, options.xValue, xScale.left + xScale.width / 2);
+	  }
+
+	  if (yScale) {
+	    y = scaleValue(yScale, options.yValue, yScale.top + yScale.height / 2);
+	  }
+	  return {x, y};
+	}
+
+	/**
+	 * @param {Chart} chart
+	 * @param {CoreAnnotationOptions} options
+	 * @returns {AnnotationBoxModel}
+	 */
+	function resolveBoxProperties(chart, options) {
+	  const scales = chart.scales;
+	  const xScale = scales[retrieveScaleID(scales, options, 'xScaleID')];
+	  const yScale = scales[retrieveScaleID(scales, options, 'yScaleID')];
+
+	  if (!xScale && !yScale) {
+	    return {};
+	  }
+
+	  let {left: x, right: x2} = xScale || chart.chartArea;
+	  let {top: y, bottom: y2} = yScale || chart.chartArea;
+	  const xDim = getChartDimensionByScale(xScale, {min: options.xMin, max: options.xMax, start: x, end: x2});
+	  x = xDim.start;
+	  x2 = xDim.end;
+	  const yDim = getChartDimensionByScale(yScale, {min: options.yMin, max: options.yMax, start: y2, end: y});
+	  y = yDim.start;
+	  y2 = yDim.end;
+
+	  return {
+	    x,
+	    y,
+	    x2,
+	    y2,
+	    width: x2 - x,
+	    height: y2 - y,
+	    centerX: x + (x2 - x) / 2,
+	    centerY: y + (y2 - y) / 2
+	  };
+	}
+
+	/**
+	 * @param {Chart} chart
+	 * @param {PointAnnotationOptions|PolygonAnnotationOptions} options
+	 * @returns {AnnotationBoxModel}
+	 */
+	function resolvePointProperties(chart, options) {
+	  if (!isBoundToPoint(options)) {
+	    const box = resolveBoxProperties(chart, options);
+	    let radius = options.radius;
+	    if (!radius || isNaN(radius)) {
+	      radius = Math.min(box.width, box.height) / 2;
+	      options.radius = radius;
+	    }
+	    const size = radius * 2;
+	    const adjustCenterX = box.centerX + options.xAdjust;
+	    const adjustCenterY = box.centerY + options.yAdjust;
+	    return {
+	      x: adjustCenterX - radius,
+	      y: adjustCenterY - radius,
+	      x2: adjustCenterX + radius,
+	      y2: adjustCenterY + radius,
+	      centerX: adjustCenterX,
+	      centerY: adjustCenterY,
+	      width: size,
+	      height: size,
+	      radius
+	    };
+	  }
+	  return getChartCircle(chart, options);
+	}
+	/**
+	 * @param {Chart} chart
+	 * @param {LineAnnotationOptions} options
+	 * @returns {AnnotationBoxModel}
+	 */
+	function resolveLineProperties(chart, options) {
+	  const {scales, chartArea} = chart;
+	  const scale = scales[options.scaleID];
+	  const area = {x: chartArea.left, y: chartArea.top, x2: chartArea.right, y2: chartArea.bottom};
+
+	  if (scale) {
+	    resolveFullLineProperties(scale, area, options);
+	  } else {
+	    resolveLimitedLineProperties(scales, area, options);
+	  }
+	  return area;
+	}
+
+	/**
+	 * @param {Chart} chart
+	 * @param {CoreAnnotationOptions} options
+	 * @param {boolean} [centerBased=false]
+	 * @returns {AnnotationBoxModel}
+	 */
+	function resolveBoxAndLabelProperties(chart, options) {
+	  const properties = resolveBoxProperties(chart, options);
+	  properties.initProperties = initAnimationProperties(chart, properties, options);
+	  properties.elements = [{
+	    type: 'label',
+	    optionScope: 'label',
+	    properties: resolveLabelElementProperties$1(chart, properties, options),
+	    initProperties: properties.initProperties
+	  }];
+	  return properties;
+	}
+
+	function getChartCircle(chart, options) {
+	  const point = getChartPoint(chart, options);
+	  const size = options.radius * 2;
+	  return {
+	    x: point.x - options.radius + options.xAdjust,
+	    y: point.y - options.radius + options.yAdjust,
+	    x2: point.x + options.radius + options.xAdjust,
+	    y2: point.y + options.radius + options.yAdjust,
+	    centerX: point.x + options.xAdjust,
+	    centerY: point.y + options.yAdjust,
+	    radius: options.radius,
+	    width: size,
+	    height: size
+	  };
+	}
+
+	function getChartDimensionByScale(scale, options) {
+	  const result = getDimensionByScale(scale, options) || options;
+	  return {
+	    start: Math.min(result.start, result.end),
+	    end: Math.max(result.start, result.end)
+	  };
+	}
+
+	function resolveFullLineProperties(scale, area, options) {
+	  const min = scaleValue(scale, options.value, NaN);
+	  const max = scaleValue(scale, options.endValue, min);
+	  if (scale.isHorizontal()) {
+	    area.x = min;
+	    area.x2 = max;
+	  } else {
+	    area.y = min;
+	    area.y2 = max;
+	  }
+	}
+
+	function resolveLimitedLineProperties(scales, area, options) {
+	  for (const scaleId of Object.keys(limitedLineScale)) {
+	    const scale = scales[retrieveScaleID(scales, options, scaleId)];
+	    if (scale) {
+	      const {min, max, start, end, startProp, endProp} = limitedLineScale[scaleId];
+	      const dim = getDimensionByScale(scale, {min: options[min], max: options[max], start: scale[start], end: scale[end]});
+	      area[startProp] = dim.start;
+	      area[endProp] = dim.end;
+	    }
+	  }
+	}
+
+	function calculateX({properties, options}, labelSize, position, padding) {
+	  const {x: start, x2: end, width: size} = properties;
+	  return calculatePosition({start, end, borderWidth: options.borderWidth}, {
+	    position: position.x,
+	    padding: {start: padding.left, end: padding.right},
+	    adjust: options.label.xAdjust,
+	    size: labelSize.width
+	  });
+	}
+
+	function calculateY({properties, options}, labelSize, position, padding) {
+	  const {y: start, y2: end, height: size} = properties;
+	  return calculatePosition({start, end, borderWidth: options.borderWidth}, {
+	    position: position.y,
+	    padding: {start: padding.top, end: padding.bottom},
+	    adjust: options.label.yAdjust,
+	    size: labelSize.height
+	  });
+	}
+
+	function calculatePosition(boxOpts, labelOpts) {
+	  const {start, end, borderWidth} = boxOpts;
+	  const {position, padding: {start: padStart, end: padEnd}, adjust} = labelOpts;
+	  const availableSize = end - borderWidth - start - padStart - padEnd - labelOpts.size;
+	  return start + borderWidth / 2 + adjust + getRelativePosition(availableSize, position);
+	}
+
+	function resolveLabelElementProperties$1(chart, properties, options) {
+	  const label = options.label;
+	  label.backgroundColor = 'transparent';
+	  label.callout.display = false;
+	  const position = toPosition(label.position);
+	  const padding = toPadding(label.padding);
+	  const labelSize = measureLabelSize(chart.ctx, label);
+	  const x = calculateX({properties, options}, labelSize, position, padding);
+	  const y = calculateY({properties, options}, labelSize, position, padding);
+	  const width = labelSize.width + padding.width;
+	  const height = labelSize.height + padding.height;
+	  return {
+	    x,
+	    y,
+	    x2: x + width,
+	    y2: y + height,
+	    width,
+	    height,
+	    centerX: x + width / 2,
+	    centerY: y + height / 2,
+	    rotation: label.rotation
+	  };
+
+	}
+
+	const moveHooks = ['enter', 'leave'];
+
+	/**
+	 * @typedef { import("chart.js").Chart } Chart
+	 * @typedef { import('../../types/options').AnnotationPluginOptions } AnnotationPluginOptions
+	 */
+
+	const eventHooks = moveHooks.concat('click');
+
+	/**
+	 * @param {Chart} chart
+	 * @param {Object} state
+	 * @param {AnnotationPluginOptions} options
+	 */
+	function updateListeners(chart, state, options) {
+	  state.listened = loadHooks(options, eventHooks, state.listeners);
+	  state.moveListened = false;
+
+	  moveHooks.forEach(hook => {
+	    if (isFunction(options[hook])) {
+	      state.moveListened = true;
+	    }
+	  });
+
+	  if (!state.listened || !state.moveListened) {
+	    state.annotations.forEach(scope => {
+	      if (!state.listened && isFunction(scope.click)) {
+	        state.listened = true;
+	      }
+	      if (!state.moveListened) {
+	        moveHooks.forEach(hook => {
+	          if (isFunction(scope[hook])) {
+	            state.listened = true;
+	            state.moveListened = true;
+	          }
+	        });
+	      }
+	    });
+	  }
+	}
+
+	/**
+	 * @param {Object} state
+	 * @param {ChartEvent} event
+	 * @param {AnnotationPluginOptions} options
+	 * @return {boolean|undefined}
+	 */
+	function handleEvent(state, event, options) {
+	  if (state.listened) {
+	    switch (event.type) {
+	    case 'mousemove':
+	    case 'mouseout':
+	      return handleMoveEvents$1(state, event, options);
+	    case 'click':
+	      return handleClickEvents$1(state, event, options);
+	    }
+	  }
+	}
+
+	function handleMoveEvents$1(state, event, options) {
+	  if (!state.moveListened) {
+	    return;
+	  }
+
+	  let elements;
+
+	  if (event.type === 'mousemove') {
+	    elements = getElements(state.visibleElements, event, options.interaction);
+	  } else {
+	    elements = [];
+	  }
+
+	  const previous = state.hovered;
+	  state.hovered = elements;
+
+	  const context = {state, event};
+	  let changed = dispatchMoveEvents$1(context, 'leave', previous, elements);
+	  return dispatchMoveEvents$1(context, 'enter', elements, previous) || changed;
+	}
+
+	function dispatchMoveEvents$1({state, event}, hook, elements, checkElements) {
+	  let changed;
+	  for (const element of elements) {
+	    if (checkElements.indexOf(element) < 0) {
+	      changed = dispatchEvent$1(element.options[hook] || state.listeners[hook], element, event) || changed;
+	    }
+	  }
+	  return changed;
+	}
+
+	function handleClickEvents$1(state, event, options) {
+	  const listeners = state.listeners;
+	  const elements = getElements(state.visibleElements, event, options.interaction);
+	  let changed;
+	  for (const element of elements) {
+	    changed = dispatchEvent$1(element.options.click || listeners.click, element, event) || changed;
+	  }
+	  return changed;
+	}
+
+	function dispatchEvent$1(handler, element, event) {
+	  return callback(handler, [element.$context, event]) === true;
+	}
+
+	/**
+	 * @typedef { import("chart.js").Chart } Chart
+	 * @typedef { import('../../types/options').AnnotationPluginOptions } AnnotationPluginOptions
+	 * @typedef { import('../../types/element').AnnotationElement } AnnotationElement
+	 */
+
+	const elementHooks = ['afterDraw', 'beforeDraw'];
+
+	/**
+	 * @param {Chart} chart
+	 * @param {Object} state
+	 * @param {AnnotationPluginOptions} options
+	 */
+	function updateHooks(chart, state, options) {
+	  const visibleElements = state.visibleElements;
+	  state.hooked = loadHooks(options, elementHooks, state.hooks);
+
+	  if (!state.hooked) {
+	    visibleElements.forEach(scope => {
+	      if (!state.hooked) {
+	        elementHooks.forEach(hook => {
+	          if (isFunction(scope.options[hook])) {
+	            state.hooked = true;
+	          }
+	        });
+	      }
+	    });
+	  }
+	}
+
+	/**
+	 * @param {Object} state
+	 * @param {AnnotationElement} element
+	 * @param {string} hook
+	 */
+	function invokeHook(state, element, hook) {
+	  if (state.hooked) {
+	    const callbackHook = element.options[hook] || state.hooks[hook];
+	    return callback(callbackHook, [element.$context]);
+	  }
+	}
+
+	/**
+	 * @typedef { import("chart.js").Chart } Chart
+	 * @typedef { import("chart.js").Scale } Scale
+	 * @typedef { import('../../types/options').CoreAnnotationOptions } CoreAnnotationOptions
+	 */
+
+	/**
+	 * @param {Chart} chart
+	 * @param {Scale} scale
+	 * @param {CoreAnnotationOptions[]} annotations
+	 */
+	function adjustScaleRange(chart, scale, annotations) {
+	  const range = getScaleLimits(chart.scales, scale, annotations);
+	  let changed = changeScaleLimit(scale, range, 'min', 'suggestedMin');
+	  changed = changeScaleLimit(scale, range, 'max', 'suggestedMax') || changed;
+	  if (changed && isFunction(scale.handleTickRangeOptions)) {
+	    scale.handleTickRangeOptions();
+	  }
+	}
+
+	/**
+	 * @param {CoreAnnotationOptions[]} annotations
+	 * @param {{ [key: string]: Scale }} scales
+	 */
+	function verifyScaleOptions(annotations, scales) {
+	  for (const annotation of annotations) {
+	    verifyScaleIDs(annotation, scales);
+	  }
+	}
+
+	function changeScaleLimit(scale, range, limit, suggestedLimit) {
+	  if (isNumberFinite(range[limit]) && !scaleLimitDefined(scale.options, limit, suggestedLimit)) {
+	    const changed = scale[limit] !== range[limit];
+	    scale[limit] = range[limit];
+	    return changed;
+	  }
+	}
+
+	function scaleLimitDefined(scaleOptions, limit, suggestedLimit) {
+	  return defined(scaleOptions[limit]) || defined(scaleOptions[suggestedLimit]);
+	}
+
+	function verifyScaleIDs(annotation, scales) {
+	  for (const key of ['scaleID', 'xScaleID', 'yScaleID']) {
+	    const scaleID = retrieveScaleID(scales, annotation, key);
+	    if (scaleID && !scales[scaleID] && verifyProperties(annotation, key)) {
+	      console.warn(`No scale found with id '${scaleID}' for annotation '${annotation.id}'`);
+	    }
+	  }
+	}
+
+	function verifyProperties(annotation, key) {
+	  if (key === 'scaleID') {
+	    return true;
+	  }
+	  const axis = key.charAt(0);
+	  for (const prop of ['Min', 'Max', 'Value']) {
+	    if (defined(annotation[axis + prop])) {
+	      return true;
+	    }
+	  }
+	  return false;
+	}
+
+	function getScaleLimits(scales, scale, annotations) {
+	  const axis = scale.axis;
+	  const scaleID = scale.id;
+	  const scaleIDOption = axis + 'ScaleID';
+	  const limits = {
+	    min: valueOrDefault(scale.min, Number.NEGATIVE_INFINITY),
+	    max: valueOrDefault(scale.max, Number.POSITIVE_INFINITY)
+	  };
+	  for (const annotation of annotations) {
+	    if (annotation.scaleID === scaleID) {
+	      updateLimits(annotation, scale, ['value', 'endValue'], limits);
+	    } else if (retrieveScaleID(scales, annotation, scaleIDOption) === scaleID) {
+	      updateLimits(annotation, scale, [axis + 'Min', axis + 'Max', axis + 'Value'], limits);
+	    }
+	  }
+	  return limits;
+	}
+
+	function updateLimits(annotation, scale, props, limits) {
+	  for (const prop of props) {
+	    const raw = annotation[prop];
+	    if (defined(raw)) {
+	      const value = scale.parse(raw);
+	      limits.min = Math.min(limits.min, value);
+	      limits.max = Math.max(limits.max, value);
+	    }
+	  }
+	}
+
+	class BoxAnnotation extends Element$1 {
+
+	  inRange(mouseX, mouseY, axis, useFinalPosition) {
+	    const {x, y} = rotated$1({x: mouseX, y: mouseY}, this.getCenterPoint(useFinalPosition), toRadians(-this.options.rotation));
+	    return inBoxRange({x, y}, this.getProps(['x', 'y', 'x2', 'y2'], useFinalPosition), axis, this.options);
+	  }
+
+	  getCenterPoint(useFinalPosition) {
+	    return getElementCenterPoint(this, useFinalPosition);
+	  }
+
+	  draw(ctx) {
+	    ctx.save();
+	    translate(ctx, this.getCenterPoint(), this.options.rotation);
+	    drawBox(ctx, this, this.options);
+	    ctx.restore();
+	  }
+
+	  get label() {
+	    return this.elements && this.elements[0];
+	  }
+
+	  resolveElementProperties(chart, options) {
+	    return resolveBoxAndLabelProperties(chart, options);
+	  }
+	}
+
+	BoxAnnotation.id = 'boxAnnotation';
+
+	BoxAnnotation.defaults = {
+	  adjustScaleRange: true,
+	  backgroundShadowColor: 'transparent',
+	  borderCapStyle: 'butt',
+	  borderDash: [],
+	  borderDashOffset: 0,
+	  borderJoinStyle: 'miter',
+	  borderRadius: 0,
+	  borderShadowColor: 'transparent',
+	  borderWidth: 1,
+	  display: true,
+	  init: undefined,
+	  hitTolerance: 0,
+	  label: {
+	    backgroundColor: 'transparent',
+	    borderWidth: 0,
+	    callout: {
+	      display: false
+	    },
+	    color: 'black',
+	    content: null,
+	    display: false,
+	    drawTime: undefined,
+	    font: {
+	      family: undefined,
+	      lineHeight: undefined,
+	      size: undefined,
+	      style: undefined,
+	      weight: 'bold'
+	    },
+	    height: undefined,
+	    hitTolerance: undefined,
+	    opacity: undefined,
+	    padding: 6,
+	    position: 'center',
+	    rotation: undefined,
+	    textAlign: 'start',
+	    textStrokeColor: undefined,
+	    textStrokeWidth: 0,
+	    width: undefined,
+	    xAdjust: 0,
+	    yAdjust: 0,
+	    z: undefined
+	  },
+	  rotation: 0,
+	  shadowBlur: 0,
+	  shadowOffsetX: 0,
+	  shadowOffsetY: 0,
+	  xMax: undefined,
+	  xMin: undefined,
+	  xScaleID: undefined,
+	  yMax: undefined,
+	  yMin: undefined,
+	  yScaleID: undefined,
+	  z: 0
+	};
+
+	BoxAnnotation.defaultRoutes = {
+	  borderColor: 'color',
+	  backgroundColor: 'color'
+	};
+
+	BoxAnnotation.descriptors = {
+	  label: {
+	    _fallback: true
+	  }
+	};
+
+	class DoughnutLabelAnnotation extends Element$1 {
+
+	  inRange(mouseX, mouseY, axis, useFinalPosition) {
+	    return inLabelRange(
+	      {x: mouseX, y: mouseY},
+	      {rect: this.getProps(['x', 'y', 'x2', 'y2'], useFinalPosition), center: this.getCenterPoint(useFinalPosition)},
+	      axis,
+	      {rotation: this.rotation, borderWidth: 0, hitTolerance: this.options.hitTolerance}
+	    );
+	  }
+
+	  getCenterPoint(useFinalPosition) {
+	    return getElementCenterPoint(this, useFinalPosition);
+	  }
+
+	  draw(ctx) {
+	    const options = this.options;
+	    if (!options.display || !options.content) {
+	      return;
+	    }
+	    drawBackground(ctx, this);
+	    ctx.save();
+	    translate(ctx, this.getCenterPoint(), this.rotation);
+	    drawLabel(ctx, this, options, this._fitRatio);
+	    ctx.restore();
+	  }
+
+	  resolveElementProperties(chart, options) {
+	    const meta = getDatasetMeta(chart, options);
+	    if (!meta) {
+	      return {};
+	    }
+	    const {controllerMeta, point, radius} = getControllerMeta(chart, options, meta);
+	    let labelSize = measureLabelSize(chart.ctx, options);
+	    const _fitRatio = getFitRatio(labelSize, radius);
+	    if (shouldFit(options, _fitRatio)) {
+	      labelSize = {width: labelSize.width * _fitRatio, height: labelSize.height * _fitRatio};
+	    }
+	    const {position, xAdjust, yAdjust} = options;
+	    const boxSize = measureLabelRectangle(point, labelSize, {borderWidth: 0, position, xAdjust, yAdjust});
+	    return {
+	      initProperties: initAnimationProperties(chart, boxSize, options),
+	      ...boxSize,
+	      ...controllerMeta,
+	      rotation: options.rotation,
+	      _fitRatio
+	    };
+	  }
+	}
+
+	DoughnutLabelAnnotation.id = 'doughnutLabelAnnotation';
+
+	DoughnutLabelAnnotation.defaults = {
+	  autoFit: true,
+	  autoHide: true,
+	  backgroundColor: 'transparent',
+	  backgroundShadowColor: 'transparent',
+	  borderColor: 'transparent',
+	  borderDash: [],
+	  borderDashOffset: 0,
+	  borderJoinStyle: 'miter',
+	  borderShadowColor: 'transparent',
+	  borderWidth: 0,
+	  color: 'black',
+	  content: null,
+	  display: true,
+	  font: {
+	    family: undefined,
+	    lineHeight: undefined,
+	    size: undefined,
+	    style: undefined,
+	    weight: undefined
+	  },
+	  height: undefined,
+	  hitTolerance: 0,
+	  init: undefined,
+	  opacity: undefined,
+	  position: 'center',
+	  rotation: 0,
+	  shadowBlur: 0,
+	  shadowOffsetX: 0,
+	  shadowOffsetY: 0,
+	  spacing: 1,
+	  textAlign: 'center',
+	  textStrokeColor: undefined,
+	  textStrokeWidth: 0,
+	  width: undefined,
+	  xAdjust: 0,
+	  yAdjust: 0
+	};
+
+	DoughnutLabelAnnotation.defaultRoutes = {
+	};
+
+	function getDatasetMeta(chart, options) {
+	  return chart.getSortedVisibleDatasetMetas().reduce(function(result, value) {
+	    const controller = value.controller;
+	    if (controller instanceof DoughnutController &&
+	      isControllerVisible(chart, options, value.data) &&
+	      (!result || controller.innerRadius < result.controller.innerRadius) &&
+	      controller.options.circumference >= 90) {
+	      return value;
+	    }
+	    return result;
+	  }, undefined);
+	}
+
+	function isControllerVisible(chart, options, elements) {
+	  if (!options.autoHide) {
+	    return true;
+	  }
+	  for (let i = 0; i < elements.length; i++) {
+	    if (!elements[i].hidden && chart.getDataVisibility(i)) {
+	      return true;
+	    }
+	  }
+	}
+
+	function getControllerMeta({chartArea}, options, meta) {
+	  const {left, top, right, bottom} = chartArea;
+	  const {innerRadius, offsetX, offsetY} = meta.controller;
+	  const x = (left + right) / 2 + offsetX;
+	  const y = (top + bottom) / 2 + offsetY;
+	  const square = {
+	    left: Math.max(x - innerRadius, left),
+	    right: Math.min(x + innerRadius, right),
+	    top: Math.max(y - innerRadius, top),
+	    bottom: Math.min(y + innerRadius, bottom)
+	  };
+	  const point = {
+	    x: (square.left + square.right) / 2,
+	    y: (square.top + square.bottom) / 2
+	  };
+	  const space = options.spacing + options.borderWidth / 2;
+	  const _radius = innerRadius - space;
+	  const _counterclockwise = point.y > y;
+	  const side = _counterclockwise ? top + space : bottom - space;
+	  const angles = getAngles(side, x, y, _radius);
+	  const controllerMeta = {
+	    _centerX: x,
+	    _centerY: y,
+	    _radius,
+	    _counterclockwise,
+	    ...angles
+	  };
+	  return {
+	    controllerMeta,
+	    point,
+	    radius: Math.min(innerRadius, Math.min(square.right - square.left, square.bottom - square.top) / 2)
+	  };
+	}
+
+	function getFitRatio({width, height}, radius) {
+	  const hypo = Math.sqrt(Math.pow(width, 2) + Math.pow(height, 2));
+	  return (radius * 2) / hypo;
+	}
+
+	function getAngles(y, centerX, centerY, radius) {
+	  const yk2 = Math.pow(centerY - y, 2);
+	  const r2 = Math.pow(radius, 2);
+	  const b = centerX * -2;
+	  const c = Math.pow(centerX, 2) + yk2 - r2;
+	  const delta = Math.pow(b, 2) - (4 * c);
+	  if (delta <= 0) {
+	    return {
+	      _startAngle: 0,
+	      _endAngle: TAU
+	    };
+	  }
+	  const start = (-b - Math.sqrt(delta)) / 2;
+	  const end = (-b + Math.sqrt(delta)) / 2;
+	  return {
+	    _startAngle: getAngleFromPoint({x: centerX, y: centerY}, {x: start, y}).angle,
+	    _endAngle: getAngleFromPoint({x: centerX, y: centerY}, {x: end, y}).angle
+	  };
+	}
+
+	function drawBackground(ctx, element) {
+	  const {_centerX, _centerY, _radius, _startAngle, _endAngle, _counterclockwise, options} = element;
+	  ctx.save();
+	  const stroke = setBorderStyle(ctx, options);
+	  ctx.fillStyle = options.backgroundColor;
+	  ctx.beginPath();
+	  ctx.arc(_centerX, _centerY, _radius, _startAngle, _endAngle, _counterclockwise);
+	  ctx.closePath();
+	  ctx.fill();
+	  if (stroke) {
+	    ctx.stroke();
+	  }
+	  ctx.restore();
+	}
+
+	class LabelAnnotation extends Element$1 {
+
+	  inRange(mouseX, mouseY, axis, useFinalPosition) {
+	    return inLabelRange(
+	      {x: mouseX, y: mouseY},
+	      {rect: this.getProps(['x', 'y', 'x2', 'y2'], useFinalPosition), center: this.getCenterPoint(useFinalPosition)},
+	      axis,
+	      {rotation: this.rotation, borderWidth: this.options.borderWidth, hitTolerance: this.options.hitTolerance}
+	    );
+	  }
+
+	  getCenterPoint(useFinalPosition) {
+	    return getElementCenterPoint(this, useFinalPosition);
+	  }
+
+	  draw(ctx) {
+	    const options = this.options;
+	    const visible = !defined(this._visible) || this._visible;
+	    if (!options.display || !options.content || !visible) {
+	      return;
+	    }
+	    ctx.save();
+	    translate(ctx, this.getCenterPoint(), this.rotation);
+	    drawCallout(ctx, this);
+	    drawBox(ctx, this, options);
+	    drawLabel(ctx, getLabelSize(this), options);
+	    ctx.restore();
+	  }
+
+	  resolveElementProperties(chart, options) {
+	    let point;
+	    if (!isBoundToPoint(options)) {
+	      const {centerX, centerY} = resolveBoxProperties(chart, options);
+	      point = {x: centerX, y: centerY};
+	    } else {
+	      point = getChartPoint(chart, options);
+	    }
+	    const padding = toPadding(options.padding);
+	    const labelSize = measureLabelSize(chart.ctx, options);
+	    const boxSize = measureLabelRectangle(point, labelSize, options, padding);
+	    return {
+	      initProperties: initAnimationProperties(chart, boxSize, options),
+	      pointX: point.x,
+	      pointY: point.y,
+	      ...boxSize,
+	      rotation: options.rotation
+	    };
+	  }
+	}
+
+	LabelAnnotation.id = 'labelAnnotation';
+
+	LabelAnnotation.defaults = {
+	  adjustScaleRange: true,
+	  backgroundColor: 'transparent',
+	  backgroundShadowColor: 'transparent',
+	  borderCapStyle: 'butt',
+	  borderDash: [],
+	  borderDashOffset: 0,
+	  borderJoinStyle: 'miter',
+	  borderRadius: 0,
+	  borderShadowColor: 'transparent',
+	  borderWidth: 0,
+	  callout: {
+	    borderCapStyle: 'butt',
+	    borderColor: undefined,
+	    borderDash: [],
+	    borderDashOffset: 0,
+	    borderJoinStyle: 'miter',
+	    borderWidth: 1,
+	    display: false,
+	    margin: 5,
+	    position: 'auto',
+	    side: 5,
+	    start: '50%',
+	  },
+	  color: 'black',
+	  content: null,
+	  display: true,
+	  font: {
+	    family: undefined,
+	    lineHeight: undefined,
+	    size: undefined,
+	    style: undefined,
+	    weight: undefined
+	  },
+	  height: undefined,
+	  hitTolerance: 0,
+	  init: undefined,
+	  opacity: undefined,
+	  padding: 6,
+	  position: 'center',
+	  rotation: 0,
+	  shadowBlur: 0,
+	  shadowOffsetX: 0,
+	  shadowOffsetY: 0,
+	  textAlign: 'center',
+	  textStrokeColor: undefined,
+	  textStrokeWidth: 0,
+	  width: undefined,
+	  xAdjust: 0,
+	  xMax: undefined,
+	  xMin: undefined,
+	  xScaleID: undefined,
+	  xValue: undefined,
+	  yAdjust: 0,
+	  yMax: undefined,
+	  yMin: undefined,
+	  yScaleID: undefined,
+	  yValue: undefined,
+	  z: 0
+	};
+
+	LabelAnnotation.defaultRoutes = {
+	  borderColor: 'color'
+	};
+
+	function getLabelSize({x, y, width, height, options}) {
+	  const hBorderWidth = options.borderWidth / 2;
+	  const padding = toPadding(options.padding);
+	  return {
+	    x: x + padding.left + hBorderWidth,
+	    y: y + padding.top + hBorderWidth,
+	    width: width - padding.left - padding.right - options.borderWidth,
+	    height: height - padding.top - padding.bottom - options.borderWidth
+	  };
+	}
+
+	const pointInLine = (p1, p2, t) => ({x: p1.x + t * (p2.x - p1.x), y: p1.y + t * (p2.y - p1.y)});
+	const interpolateX = (y, p1, p2) => pointInLine(p1, p2, Math.abs((y - p1.y) / (p2.y - p1.y))).x;
+	const interpolateY = (x, p1, p2) => pointInLine(p1, p2, Math.abs((x - p1.x) / (p2.x - p1.x))).y;
+	const sqr = v => v * v;
+	const rangeLimit = (mouseX, mouseY, {x, y, x2, y2}, axis) => axis === 'y' ? {start: Math.min(y, y2), end: Math.max(y, y2), value: mouseY} : {start: Math.min(x, x2), end: Math.max(x, x2), value: mouseX};
+	// http://www.independent-software.com/determining-coordinates-on-a-html-canvas-bezier-curve.html
+	const coordInCurve = (start, cp, end, t) => (1 - t) * (1 - t) * start + 2 * (1 - t) * t * cp + t * t * end;
+	const pointInCurve = (start, cp, end, t) => ({x: coordInCurve(start.x, cp.x, end.x, t), y: coordInCurve(start.y, cp.y, end.y, t)});
+	const coordAngleInCurve = (start, cp, end, t) => 2 * (1 - t) * (cp - start) + 2 * t * (end - cp);
+	const angleInCurve = (start, cp, end, t) => -Math.atan2(coordAngleInCurve(start.x, cp.x, end.x, t), coordAngleInCurve(start.y, cp.y, end.y, t)) + 0.5 * PI;
+
+	class LineAnnotation extends Element$1 {
+
+	  inRange(mouseX, mouseY, axis, useFinalPosition) {
+	    const hitSize = (this.options.borderWidth + this.options.hitTolerance) / 2;
+	    if (axis !== 'x' && axis !== 'y') {
+	      const point = {mouseX, mouseY};
+	      const {path, ctx} = this;
+	      if (path) {
+	        setBorderStyle(ctx, this.options);
+	        ctx.lineWidth += this.options.hitTolerance;
+	        const {chart} = this.$context;
+	        const mx = mouseX * chart.currentDevicePixelRatio;
+	        const my = mouseY * chart.currentDevicePixelRatio;
+	        const result = ctx.isPointInStroke(path, mx, my) || isOnLabel(this, point, useFinalPosition);
+	        ctx.restore();
+	        return result;
+	      }
+	      const epsilon = sqr(hitSize);
+	      return intersects(this, point, epsilon, useFinalPosition) || isOnLabel(this, point, useFinalPosition);
+	    }
+	    return inAxisRange(this, {mouseX, mouseY}, axis, {hitSize, useFinalPosition});
+	  }
+
+	  getCenterPoint(useFinalPosition) {
+	    return getElementCenterPoint(this, useFinalPosition);
+	  }
+
+	  draw(ctx) {
+	    const {x, y, x2, y2, cp, options} = this;
+
+	    ctx.save();
+	    if (!setBorderStyle(ctx, options)) {
+	      // no border width, then line is not drawn
+	      return ctx.restore();
+	    }
+	    setShadowStyle(ctx, options);
+
+	    const length = Math.sqrt(Math.pow(x2 - x, 2) + Math.pow(y2 - y, 2));
+	    if (options.curve && cp) {
+	      drawCurve(ctx, this, cp, length);
+	      return ctx.restore();
+	    }
+	    const {startOpts, endOpts, startAdjust, endAdjust} = getArrowHeads(this);
+	    const angle = Math.atan2(y2 - y, x2 - x);
+	    ctx.translate(x, y);
+	    ctx.rotate(angle);
+	    ctx.beginPath();
+	    ctx.moveTo(0 + startAdjust, 0);
+	    ctx.lineTo(length - endAdjust, 0);
+	    ctx.shadowColor = options.borderShadowColor;
+	    ctx.stroke();
+	    drawArrowHead(ctx, 0, startAdjust, startOpts);
+	    drawArrowHead(ctx, length, -endAdjust, endOpts);
+	    ctx.restore();
+	  }
+
+	  get label() {
+	    return this.elements && this.elements[0];
+	  }
+
+	  resolveElementProperties(chart, options) {
+	    const area = resolveLineProperties(chart, options);
+	    const {x, y, x2, y2} = area;
+	    const inside = isLineInArea(area, chart.chartArea);
+	    const properties = inside
+	      ? limitLineToArea({x, y}, {x: x2, y: y2}, chart.chartArea)
+	      : {x, y, x2, y2, width: Math.abs(x2 - x), height: Math.abs(y2 - y)};
+	    properties.centerX = (x2 + x) / 2;
+	    properties.centerY = (y2 + y) / 2;
+	    properties.initProperties = initAnimationProperties(chart, properties, options);
+	    if (options.curve) {
+	      const p1 = {x: properties.x, y: properties.y};
+	      const p2 = {x: properties.x2, y: properties.y2};
+	      properties.cp = getControlPoint(properties, options, distanceBetweenPoints(p1, p2));
+	    }
+	    const labelProperties = resolveLabelElementProperties(chart, properties, options.label);
+	    // additonal prop to manage zoom/pan
+	    labelProperties._visible = inside;
+
+	    properties.elements = [{
+	      type: 'label',
+	      optionScope: 'label',
+	      properties: labelProperties,
+	      initProperties: properties.initProperties
+	    }];
+	    return properties;
+	  }
+	}
+
+	LineAnnotation.id = 'lineAnnotation';
+
+	const arrowHeadsDefaults = {
+	  backgroundColor: undefined,
+	  backgroundShadowColor: undefined,
+	  borderColor: undefined,
+	  borderDash: undefined,
+	  borderDashOffset: undefined,
+	  borderShadowColor: undefined,
+	  borderWidth: undefined,
+	  display: undefined,
+	  fill: undefined,
+	  length: undefined,
+	  shadowBlur: undefined,
+	  shadowOffsetX: undefined,
+	  shadowOffsetY: undefined,
+	  width: undefined
+	};
+
+	LineAnnotation.defaults = {
+	  adjustScaleRange: true,
+	  arrowHeads: {
+	    display: false,
+	    end: Object.assign({}, arrowHeadsDefaults),
+	    fill: false,
+	    length: 12,
+	    start: Object.assign({}, arrowHeadsDefaults),
+	    width: 6
+	  },
+	  borderDash: [],
+	  borderDashOffset: 0,
+	  borderShadowColor: 'transparent',
+	  borderWidth: 2,
+	  curve: false,
+	  controlPoint: {
+	    y: '-50%'
+	  },
+	  display: true,
+	  endValue: undefined,
+	  init: undefined,
+	  hitTolerance: 0,
+	  label: {
+	    backgroundColor: 'rgba(0,0,0,0.8)',
+	    backgroundShadowColor: 'transparent',
+	    borderCapStyle: 'butt',
+	    borderColor: 'black',
+	    borderDash: [],
+	    borderDashOffset: 0,
+	    borderJoinStyle: 'miter',
+	    borderRadius: 6,
+	    borderShadowColor: 'transparent',
+	    borderWidth: 0,
+	    callout: Object.assign({}, LabelAnnotation.defaults.callout),
+	    color: '#fff',
+	    content: null,
+	    display: false,
+	    drawTime: undefined,
+	    font: {
+	      family: undefined,
+	      lineHeight: undefined,
+	      size: undefined,
+	      style: undefined,
+	      weight: 'bold'
+	    },
+	    height: undefined,
+	    hitTolerance: undefined,
+	    opacity: undefined,
+	    padding: 6,
+	    position: 'center',
+	    rotation: 0,
+	    shadowBlur: 0,
+	    shadowOffsetX: 0,
+	    shadowOffsetY: 0,
+	    textAlign: 'center',
+	    textStrokeColor: undefined,
+	    textStrokeWidth: 0,
+	    width: undefined,
+	    xAdjust: 0,
+	    yAdjust: 0,
+	    z: undefined
+	  },
+	  scaleID: undefined,
+	  shadowBlur: 0,
+	  shadowOffsetX: 0,
+	  shadowOffsetY: 0,
+	  value: undefined,
+	  xMax: undefined,
+	  xMin: undefined,
+	  xScaleID: undefined,
+	  yMax: undefined,
+	  yMin: undefined,
+	  yScaleID: undefined,
+	  z: 0
+	};
+
+	LineAnnotation.descriptors = {
+	  arrowHeads: {
+	    start: {
+	      _fallback: true
+	    },
+	    end: {
+	      _fallback: true
+	    },
+	    _fallback: true
+	  }
+	};
+
+	LineAnnotation.defaultRoutes = {
+	  borderColor: 'color'
+	};
+
+	function inAxisRange(element, {mouseX, mouseY}, axis, {hitSize, useFinalPosition}) {
+	  const limit = rangeLimit(mouseX, mouseY, element.getProps(['x', 'y', 'x2', 'y2'], useFinalPosition), axis);
+	  return inLimit(limit, hitSize) || isOnLabel(element, {mouseX, mouseY}, useFinalPosition, axis);
+	}
+
+	function isLineInArea({x, y, x2, y2}, {top, right, bottom, left}) {
+	  return !(
+	    (x < left && x2 < left) ||
+	    (x > right && x2 > right) ||
+	    (y < top && y2 < top) ||
+	    (y > bottom && y2 > bottom)
+	  );
+	}
+
+	function limitPointToArea({x, y}, p2, {top, right, bottom, left}) {
+	  if (x < left) {
+	    y = interpolateY(left, {x, y}, p2);
+	    x = left;
+	  }
+	  if (x > right) {
+	    y = interpolateY(right, {x, y}, p2);
+	    x = right;
+	  }
+	  if (y < top) {
+	    x = interpolateX(top, {x, y}, p2);
+	    y = top;
+	  }
+	  if (y > bottom) {
+	    x = interpolateX(bottom, {x, y}, p2);
+	    y = bottom;
+	  }
+	  return {x, y};
+	}
+
+	function limitLineToArea(p1, p2, area) {
+	  const {x, y} = limitPointToArea(p1, p2, area);
+	  const {x: x2, y: y2} = limitPointToArea(p2, p1, area);
+	  return {x, y, x2, y2, width: Math.abs(x2 - x), height: Math.abs(y2 - y)};
+	}
+
+	function intersects(element, {mouseX, mouseY}, epsilon = EPSILON, useFinalPosition) {
+	  // Adapted from https://stackoverflow.com/a/6853926/25507
+	  const {x: x1, y: y1, x2, y2} = element.getProps(['x', 'y', 'x2', 'y2'], useFinalPosition);
+	  const dx = x2 - x1;
+	  const dy = y2 - y1;
+	  const lenSq = sqr(dx) + sqr(dy);
+	  const t = lenSq === 0 ? -1 : ((mouseX - x1) * dx + (mouseY - y1) * dy) / lenSq;
+
+	  let xx, yy;
+	  if (t < 0) {
+	    xx = x1;
+	    yy = y1;
+	  } else if (t > 1) {
+	    xx = x2;
+	    yy = y2;
+	  } else {
+	    xx = x1 + t * dx;
+	    yy = y1 + t * dy;
+	  }
+	  return (sqr(mouseX - xx) + sqr(mouseY - yy)) <= epsilon;
+	}
+
+	function isOnLabel(element, {mouseX, mouseY}, useFinalPosition, axis) {
+	  const label = element.label;
+	  return label.options.display && label.inRange(mouseX, mouseY, axis, useFinalPosition);
+	}
+
+	function resolveLabelElementProperties(chart, properties, options) {
+	  const borderWidth = options.borderWidth;
+	  const padding = toPadding(options.padding);
+	  const textSize = measureLabelSize(chart.ctx, options);
+	  const width = textSize.width + padding.width + borderWidth;
+	  const height = textSize.height + padding.height + borderWidth;
+	  return calculateLabelPosition(properties, options, {width, height, padding}, chart.chartArea);
+	}
+
+	function calculateAutoRotation(properties) {
+	  const {x, y, x2, y2} = properties;
+	  const rotation = Math.atan2(y2 - y, x2 - x);
+	  // Flip the rotation if it goes > PI/2 or < -PI/2, so label stays upright
+	  return rotation > PI / 2 ? rotation - PI : rotation < PI / -2 ? rotation + PI : rotation;
+	}
+
+	function calculateLabelPosition(properties, label, sizes, chartArea) {
+	  const {width, height, padding} = sizes;
+	  const {xAdjust, yAdjust} = label;
+	  const p1 = {x: properties.x, y: properties.y};
+	  const p2 = {x: properties.x2, y: properties.y2};
+	  const rotation = label.rotation === 'auto' ? calculateAutoRotation(properties) : toRadians(label.rotation);
+	  const size = rotatedSize(width, height, rotation);
+	  const t = calculateT(properties, label, {labelSize: size, padding}, chartArea);
+	  const pt = properties.cp ? pointInCurve(p1, properties.cp, p2, t) : pointInLine(p1, p2, t);
+	  const xCoordinateSizes = {size: size.w, min: chartArea.left, max: chartArea.right, padding: padding.left};
+	  const yCoordinateSizes = {size: size.h, min: chartArea.top, max: chartArea.bottom, padding: padding.top};
+	  const centerX = adjustLabelCoordinate(pt.x, xCoordinateSizes) + xAdjust;
+	  const centerY = adjustLabelCoordinate(pt.y, yCoordinateSizes) + yAdjust;
+	  return {
+	    x: centerX - (width / 2),
+	    y: centerY - (height / 2),
+	    x2: centerX + (width / 2),
+	    y2: centerY + (height / 2),
+	    centerX,
+	    centerY,
+	    pointX: pt.x,
+	    pointY: pt.y,
+	    width,
+	    height,
+	    rotation: toDegrees(rotation)
+	  };
+	}
+
+	function rotatedSize(width, height, rotation) {
+	  const cos = Math.cos(rotation);
+	  const sin = Math.sin(rotation);
+	  return {
+	    w: Math.abs(width * cos) + Math.abs(height * sin),
+	    h: Math.abs(width * sin) + Math.abs(height * cos)
+	  };
+	}
+
+	function calculateT(properties, label, sizes, chartArea) {
+	  let t;
+	  const space = spaceAround(properties, chartArea);
+	  if (label.position === 'start') {
+	    t = calculateTAdjust({w: properties.x2 - properties.x, h: properties.y2 - properties.y}, sizes, label, space);
+	  } else if (label.position === 'end') {
+	    t = 1 - calculateTAdjust({w: properties.x - properties.x2, h: properties.y - properties.y2}, sizes, label, space);
+	  } else {
+	    t = getRelativePosition(1, label.position);
+	  }
+	  return t;
+	}
+
+	function calculateTAdjust(lineSize, sizes, label, space) {
+	  const {labelSize, padding} = sizes;
+	  const lineW = lineSize.w * space.dx;
+	  const lineH = lineSize.h * space.dy;
+	  const x = (lineW > 0) && ((labelSize.w / 2 + padding.left - space.x) / lineW);
+	  const y = (lineH > 0) && ((labelSize.h / 2 + padding.top - space.y) / lineH);
+	  return clamp(Math.max(x, y), 0, 0.25);
+	}
+
+	function spaceAround(properties, chartArea) {
+	  const {x, x2, y, y2} = properties;
+	  const t = Math.min(y, y2) - chartArea.top;
+	  const l = Math.min(x, x2) - chartArea.left;
+	  const b = chartArea.bottom - Math.max(y, y2);
+	  const r = chartArea.right - Math.max(x, x2);
+	  return {
+	    x: Math.min(l, r),
+	    y: Math.min(t, b),
+	    dx: l <= r ? 1 : -1,
+	    dy: t <= b ? 1 : -1
+	  };
+	}
+
+	function adjustLabelCoordinate(coordinate, labelSizes) {
+	  const {size, min, max, padding} = labelSizes;
+	  const halfSize = size / 2;
+	  if (size > max - min) {
+	    // if it does not fit, display as much as possible
+	    return (max + min) / 2;
+	  }
+	  if (min >= (coordinate - padding - halfSize)) {
+	    coordinate = min + padding + halfSize;
+	  }
+	  if (max <= (coordinate + padding + halfSize)) {
+	    coordinate = max - padding - halfSize;
+	  }
+	  return coordinate;
+	}
+
+	function getArrowHeads(line) {
+	  const options = line.options;
+	  const arrowStartOpts = options.arrowHeads && options.arrowHeads.start;
+	  const arrowEndOpts = options.arrowHeads && options.arrowHeads.end;
+	  return {
+	    startOpts: arrowStartOpts,
+	    endOpts: arrowEndOpts,
+	    startAdjust: getLineAdjust(line, arrowStartOpts),
+	    endAdjust: getLineAdjust(line, arrowEndOpts)
+	  };
+	}
+
+	function getLineAdjust(line, arrowOpts) {
+	  if (!arrowOpts || !arrowOpts.display) {
+	    return 0;
+	  }
+	  const {length, width} = arrowOpts;
+	  const adjust = line.options.borderWidth / 2;
+	  const p1 = {x: length, y: width + adjust};
+	  const p2 = {x: 0, y: adjust};
+	  return Math.abs(interpolateX(0, p1, p2));
+	}
+
+	function drawArrowHead(ctx, offset, adjust, arrowOpts) {
+	  if (!arrowOpts || !arrowOpts.display) {
+	    return;
+	  }
+	  const {length, width, fill, backgroundColor, borderColor} = arrowOpts;
+	  const arrowOffsetX = Math.abs(offset - length) + adjust;
+	  ctx.beginPath();
+	  setShadowStyle(ctx, arrowOpts);
+	  setBorderStyle(ctx, arrowOpts);
+	  ctx.moveTo(arrowOffsetX, -width);
+	  ctx.lineTo(offset + adjust, 0);
+	  ctx.lineTo(arrowOffsetX, width);
+	  if (fill === true) {
+	    ctx.fillStyle = backgroundColor || borderColor;
+	    ctx.closePath();
+	    ctx.fill();
+	    ctx.shadowColor = 'transparent';
+	  } else {
+	    ctx.shadowColor = arrowOpts.borderShadowColor;
+	  }
+	  ctx.stroke();
+	}
+
+	function getControlPoint(properties, options, distance) {
+	  const {x, y, x2, y2, centerX, centerY} = properties;
+	  const angle = Math.atan2(y2 - y, x2 - x);
+	  const cp = toPosition(options.controlPoint, 0);
+	  const point = {
+	    x: centerX + getSize(distance, cp.x, false),
+	    y: centerY + getSize(distance, cp.y, false)
+	  };
+	  return rotated$1(point, {x: centerX, y: centerY}, angle);
+	}
+
+	function drawArrowHeadOnCurve(ctx, {x, y}, {angle, adjust}, arrowOpts) {
+	  if (!arrowOpts || !arrowOpts.display) {
+	    return;
+	  }
+	  ctx.save();
+	  ctx.translate(x, y);
+	  ctx.rotate(angle);
+	  drawArrowHead(ctx, 0, -adjust, arrowOpts);
+	  ctx.restore();
+	}
+
+	function drawCurve(ctx, element, cp, length) {
+	  const {x, y, x2, y2, options} = element;
+	  const {startOpts, endOpts, startAdjust, endAdjust} = getArrowHeads(element);
+	  const p1 = {x, y};
+	  const p2 = {x: x2, y: y2};
+	  const startAngle = angleInCurve(p1, cp, p2, 0);
+	  const endAngle = angleInCurve(p1, cp, p2, 1) - PI;
+	  const ps = pointInCurve(p1, cp, p2, startAdjust / length);
+	  const pe = pointInCurve(p1, cp, p2, 1 - endAdjust / length);
+
+	  const path = new Path2D();
+	  ctx.beginPath();
+	  path.moveTo(ps.x, ps.y);
+	  path.quadraticCurveTo(cp.x, cp.y, pe.x, pe.y);
+	  ctx.shadowColor = options.borderShadowColor;
+	  ctx.stroke(path);
+	  element.path = path;
+	  element.ctx = ctx;
+	  drawArrowHeadOnCurve(ctx, ps, {angle: startAngle, adjust: startAdjust}, startOpts);
+	  drawArrowHeadOnCurve(ctx, pe, {angle: endAngle, adjust: endAdjust}, endOpts);
+	}
+
+	class EllipseAnnotation extends Element$1 {
+
+	  inRange(mouseX, mouseY, axis, useFinalPosition) {
+	    const rotation = this.options.rotation;
+	    const hitSize = (this.options.borderWidth + this.options.hitTolerance) / 2;
+	    if (axis !== 'x' && axis !== 'y') {
+	      return pointInEllipse({x: mouseX, y: mouseY}, this.getProps(['width', 'height', 'centerX', 'centerY'], useFinalPosition), rotation, hitSize);
+	    }
+	    const {x, y, x2, y2} = this.getProps(['x', 'y', 'x2', 'y2'], useFinalPosition);
+	    const limit = axis === 'y' ? {start: y, end: y2} : {start: x, end: x2};
+	    const rotatedPoint = rotated$1({x: mouseX, y: mouseY}, this.getCenterPoint(useFinalPosition), toRadians(-rotation));
+	    return rotatedPoint[axis] >= limit.start - hitSize - EPSILON && rotatedPoint[axis] <= limit.end + hitSize + EPSILON;
+	  }
+
+	  getCenterPoint(useFinalPosition) {
+	    return getElementCenterPoint(this, useFinalPosition);
+	  }
+
+	  draw(ctx) {
+	    const {width, height, centerX, centerY, options} = this;
+	    ctx.save();
+	    translate(ctx, this.getCenterPoint(), options.rotation);
+	    setShadowStyle(ctx, this.options);
+	    ctx.beginPath();
+	    ctx.fillStyle = options.backgroundColor;
+	    const stroke = setBorderStyle(ctx, options);
+	    ctx.ellipse(centerX, centerY, height / 2, width / 2, PI / 2, 0, 2 * PI);
+	    ctx.fill();
+	    if (stroke) {
+	      ctx.shadowColor = options.borderShadowColor;
+	      ctx.stroke();
+	    }
+	    ctx.restore();
+	  }
+
+	  get label() {
+	    return this.elements && this.elements[0];
+	  }
+
+	  resolveElementProperties(chart, options) {
+	    return resolveBoxAndLabelProperties(chart, options);
+	  }
+
+	}
+
+	EllipseAnnotation.id = 'ellipseAnnotation';
+
+	EllipseAnnotation.defaults = {
+	  adjustScaleRange: true,
+	  backgroundShadowColor: 'transparent',
+	  borderDash: [],
+	  borderDashOffset: 0,
+	  borderShadowColor: 'transparent',
+	  borderWidth: 1,
+	  display: true,
+	  hitTolerance: 0,
+	  init: undefined,
+	  label: Object.assign({}, BoxAnnotation.defaults.label),
+	  rotation: 0,
+	  shadowBlur: 0,
+	  shadowOffsetX: 0,
+	  shadowOffsetY: 0,
+	  xMax: undefined,
+	  xMin: undefined,
+	  xScaleID: undefined,
+	  yMax: undefined,
+	  yMin: undefined,
+	  yScaleID: undefined,
+	  z: 0
+	};
+
+	EllipseAnnotation.defaultRoutes = {
+	  borderColor: 'color',
+	  backgroundColor: 'color'
+	};
+
+	EllipseAnnotation.descriptors = {
+	  label: {
+	    _fallback: true
+	  }
+	};
+
+	function pointInEllipse(p, ellipse, rotation, hitSize) {
+	  const {width, height, centerX, centerY} = ellipse;
+	  const xRadius = width / 2;
+	  const yRadius = height / 2;
+
+	  if (xRadius <= 0 || yRadius <= 0) {
+	    return false;
+	  }
+	  // https://stackoverflow.com/questions/7946187/point-and-ellipse-rotated-position-test-algorithm
+	  const angle = toRadians(rotation || 0);
+	  const cosAngle = Math.cos(angle);
+	  const sinAngle = Math.sin(angle);
+	  const a = Math.pow(cosAngle * (p.x - centerX) + sinAngle * (p.y - centerY), 2);
+	  const b = Math.pow(sinAngle * (p.x - centerX) - cosAngle * (p.y - centerY), 2);
+	  return (a / Math.pow(xRadius + hitSize, 2)) + (b / Math.pow(yRadius + hitSize, 2)) <= 1.0001;
+	}
+
+	class PointAnnotation extends Element$1 {
+
+	  inRange(mouseX, mouseY, axis, useFinalPosition) {
+	    const {x, y, x2, y2, width} = this.getProps(['x', 'y', 'x2', 'y2', 'width'], useFinalPosition);
+	    const hitSize = (this.options.borderWidth + this.options.hitTolerance) / 2;
+	    if (axis !== 'x' && axis !== 'y') {
+	      return inPointRange({x: mouseX, y: mouseY}, this.getCenterPoint(useFinalPosition), width / 2, hitSize);
+	    }
+	    const limit = axis === 'y' ? {start: y, end: y2, value: mouseY} : {start: x, end: x2, value: mouseX};
+	    return inLimit(limit, hitSize);
+	  }
+
+	  getCenterPoint(useFinalPosition) {
+	    return getElementCenterPoint(this, useFinalPosition);
+	  }
+
+	  draw(ctx) {
+	    const options = this.options;
+	    const borderWidth = options.borderWidth;
+	    if (options.radius < 0.1) {
+	      return;
+	    }
+	    ctx.save();
+	    ctx.fillStyle = options.backgroundColor;
+	    setShadowStyle(ctx, options);
+	    const stroke = setBorderStyle(ctx, options);
+	    drawPoint(ctx, this, this.centerX, this.centerY);
+	    if (stroke && !isImageOrCanvas(options.pointStyle)) {
+	      ctx.shadowColor = options.borderShadowColor;
+	      ctx.stroke();
+	    }
+	    ctx.restore();
+	    options.borderWidth = borderWidth;
+	  }
+
+	  resolveElementProperties(chart, options) {
+	    const properties = resolvePointProperties(chart, options);
+	    properties.initProperties = initAnimationProperties(chart, properties, options);
+	    return properties;
+	  }
+	}
+
+	PointAnnotation.id = 'pointAnnotation';
+
+	PointAnnotation.defaults = {
+	  adjustScaleRange: true,
+	  backgroundShadowColor: 'transparent',
+	  borderDash: [],
+	  borderDashOffset: 0,
+	  borderShadowColor: 'transparent',
+	  borderWidth: 1,
+	  display: true,
+	  hitTolerance: 0,
+	  init: undefined,
+	  pointStyle: 'circle',
+	  radius: 10,
+	  rotation: 0,
+	  shadowBlur: 0,
+	  shadowOffsetX: 0,
+	  shadowOffsetY: 0,
+	  xAdjust: 0,
+	  xMax: undefined,
+	  xMin: undefined,
+	  xScaleID: undefined,
+	  xValue: undefined,
+	  yAdjust: 0,
+	  yMax: undefined,
+	  yMin: undefined,
+	  yScaleID: undefined,
+	  yValue: undefined,
+	  z: 0
+	};
+
+	PointAnnotation.defaultRoutes = {
+	  borderColor: 'color',
+	  backgroundColor: 'color'
+	};
+
+	class PolygonAnnotation extends Element$1 {
+
+	  inRange(mouseX, mouseY, axis, useFinalPosition) {
+	    if (axis !== 'x' && axis !== 'y') {
+	      return this.options.radius >= 0.1 && this.elements.length > 1 && pointIsInPolygon(this.elements, mouseX, mouseY, useFinalPosition);
+	    }
+	    const rotatedPoint = rotated$1({x: mouseX, y: mouseY}, this.getCenterPoint(useFinalPosition), toRadians(-this.options.rotation));
+	    const axisPoints = this.elements.map((point) => axis === 'y' ? point.bY : point.bX);
+	    const start = Math.min(...axisPoints);
+	    const end = Math.max(...axisPoints);
+	    return rotatedPoint[axis] >= start && rotatedPoint[axis] <= end;
+	  }
+
+	  getCenterPoint(useFinalPosition) {
+	    return getElementCenterPoint(this, useFinalPosition);
+	  }
+
+	  draw(ctx) {
+	    const {elements, options} = this;
+	    ctx.save();
+	    ctx.beginPath();
+	    ctx.fillStyle = options.backgroundColor;
+	    setShadowStyle(ctx, options);
+	    const stroke = setBorderStyle(ctx, options);
+	    let first = true;
+	    for (const el of elements) {
+	      if (first) {
+	        ctx.moveTo(el.x, el.y);
+	        first = false;
+	      } else {
+	        ctx.lineTo(el.x, el.y);
+	      }
+	    }
+	    ctx.closePath();
+	    ctx.fill();
+	    // If no border, don't draw it
+	    if (stroke) {
+	      ctx.shadowColor = options.borderShadowColor;
+	      ctx.stroke();
+	    }
+	    ctx.restore();
+	  }
+
+	  resolveElementProperties(chart, options) {
+	    const properties = resolvePointProperties(chart, options);
+	    const {sides, rotation} = options;
+	    const elements = [];
+	    const angle = (2 * PI) / sides;
+	    let rad = rotation * RAD_PER_DEG;
+	    for (let i = 0; i < sides; i++, rad += angle) {
+	      const elProps = buildPointElement(properties, options, rad);
+	      elProps.initProperties = initAnimationProperties(chart, properties, options);
+	      elements.push(elProps);
+	    }
+	    properties.elements = elements;
+	    return properties;
+	  }
+	}
+
+	PolygonAnnotation.id = 'polygonAnnotation';
+
+	PolygonAnnotation.defaults = {
+	  adjustScaleRange: true,
+	  backgroundShadowColor: 'transparent',
+	  borderCapStyle: 'butt',
+	  borderDash: [],
+	  borderDashOffset: 0,
+	  borderJoinStyle: 'miter',
+	  borderShadowColor: 'transparent',
+	  borderWidth: 1,
+	  display: true,
+	  hitTolerance: 0,
+	  init: undefined,
+	  point: {
+	    radius: 0
+	  },
+	  radius: 10,
+	  rotation: 0,
+	  shadowBlur: 0,
+	  shadowOffsetX: 0,
+	  shadowOffsetY: 0,
+	  sides: 3,
+	  xAdjust: 0,
+	  xMax: undefined,
+	  xMin: undefined,
+	  xScaleID: undefined,
+	  xValue: undefined,
+	  yAdjust: 0,
+	  yMax: undefined,
+	  yMin: undefined,
+	  yScaleID: undefined,
+	  yValue: undefined,
+	  z: 0
+	};
+
+	PolygonAnnotation.defaultRoutes = {
+	  borderColor: 'color',
+	  backgroundColor: 'color'
+	};
+
+	function buildPointElement({centerX, centerY}, {radius, borderWidth, hitTolerance}, rad) {
+	  const hitSize = (borderWidth + hitTolerance) / 2;
+	  const sin = Math.sin(rad);
+	  const cos = Math.cos(rad);
+	  const point = {x: centerX + sin * radius, y: centerY - cos * radius};
+	  return {
+	    type: 'point',
+	    optionScope: 'point',
+	    properties: {
+	      x: point.x,
+	      y: point.y,
+	      centerX: point.x,
+	      centerY: point.y,
+	      bX: centerX + sin * (radius + hitSize),
+	      bY: centerY - cos * (radius + hitSize)
+	    }
+	  };
+	}
+
+	function pointIsInPolygon(points, x, y, useFinalPosition) {
+	  let isInside = false;
+	  let A = points[points.length - 1].getProps(['bX', 'bY'], useFinalPosition);
+	  for (const point of points) {
+	    const B = point.getProps(['bX', 'bY'], useFinalPosition);
+	    if ((B.bY > y) !== (A.bY > y) && x < (A.bX - B.bX) * (y - B.bY) / (A.bY - B.bY) + B.bX) {
+	      isInside = !isInside;
+	    }
+	    A = B;
+	  }
+	  return isInside;
+	}
+
+	const annotationTypes = {
+	  box: BoxAnnotation,
+	  doughnutLabel: DoughnutLabelAnnotation,
+	  ellipse: EllipseAnnotation,
+	  label: LabelAnnotation,
+	  line: LineAnnotation,
+	  point: PointAnnotation,
+	  polygon: PolygonAnnotation
+	};
+
+	/**
+	 * Register fallback for annotation elements
+	 * For example lineAnnotation options would be looked through:
+	 * - the annotation object (options.plugins.annotation.annotations[id])
+	 * - element options (options.elements.lineAnnotation)
+	 * - element defaults (defaults.elements.lineAnnotation)
+	 * - annotation plugin defaults (defaults.plugins.annotation, this is what we are registering here)
+	 */
+	Object.keys(annotationTypes).forEach(key => {
+	  defaults$1.describe(`elements.${annotationTypes[key].id}`, {
+	    _fallback: 'plugins.annotation.common'
+	  });
+	});
+
+	const directUpdater = {
+	  update: Object.assign
+	};
+
+	const hooks$1 = eventHooks.concat(elementHooks);
+	const resolve = (value, optDefs) => isObject(optDefs) ? resolveObj(value, optDefs) : value;
+
+
+	/**
+	 * @typedef { import("chart.js").Chart } Chart
+	 * @typedef { import("chart.js").UpdateMode } UpdateMode
+	 * @typedef { import('../../types/options').AnnotationPluginOptions } AnnotationPluginOptions
+	 */
+
+	/**
+	 * @param {string} prop
+	 * @returns {boolean}
+	 */
+	const isIndexable = (prop) => prop === 'color' || prop === 'font';
+
+	/**
+	 * Resolve the annotation type, checking if is supported.
+	 * @param {string} [type=line] - annotation type
+	 * @returns {string} resolved annotation type
+	 */
+	function resolveType(type = 'line') {
+	  if (annotationTypes[type]) {
+	    return type;
+	  }
+	  console.warn(`Unknown annotation type: '${type}', defaulting to 'line'`);
+	  return 'line';
+	}
+
+	/**
+	 * @param {Chart} chart
+	 * @param {Object} state
+	 * @param {AnnotationPluginOptions} options
+	 * @param {UpdateMode} mode
+	 */
+	function updateElements(chart, state, options, mode) {
+	  const animations = resolveAnimations(chart, options.animations, mode);
+
+	  const annotations = state.annotations;
+	  const elements = resyncElements(state.elements, annotations);
+
+	  for (let i = 0; i < annotations.length; i++) {
+	    const annotationOptions = annotations[i];
+	    const element = getOrCreateElement(elements, i, annotationOptions.type);
+	    const resolver = annotationOptions.setContext(getContext(chart, element, elements, annotationOptions));
+	    const properties = element.resolveElementProperties(chart, resolver);
+
+	    properties.skip = toSkip(properties);
+
+	    if ('elements' in properties) {
+	      updateSubElements(element, properties.elements, resolver, animations);
+	      // Remove the sub-element definitions from properties, so the actual elements
+	      // are not overwritten by their definitions
+	      delete properties.elements;
+	    }
+
+	    if (!defined(element.x)) {
+	      // If the element is newly created, assing the properties directly - to
+	      // make them readily awailable to any scriptable options. If we do not do this,
+	      // the properties retruned by `resolveElementProperties` are available only
+	      // after options resolution.
+	      Object.assign(element, properties);
+	    }
+
+	    Object.assign(element, properties.initProperties);
+	    properties.options = resolveAnnotationOptions(resolver);
+
+	    animations.update(element, properties);
+	  }
+	}
+
+	function toSkip(properties) {
+	  return isNaN(properties.x) || isNaN(properties.y);
+	}
+
+	function resolveAnimations(chart, animOpts, mode) {
+	  if (mode === 'reset' || mode === 'none' || mode === 'resize') {
+	    return directUpdater;
+	  }
+	  return new Animations(chart, animOpts);
+	}
+
+	function updateSubElements(mainElement, elements, resolver, animations) {
+	  const subElements = mainElement.elements || (mainElement.elements = []);
+	  subElements.length = elements.length;
+	  for (let i = 0; i < elements.length; i++) {
+	    const definition = elements[i];
+	    const properties = definition.properties;
+	    const subElement = getOrCreateElement(subElements, i, definition.type, definition.initProperties);
+	    const subResolver = resolver[definition.optionScope].override(definition);
+	    properties.options = resolveAnnotationOptions(subResolver);
+	    animations.update(subElement, properties);
+	  }
+	}
+
+	function getOrCreateElement(elements, index, type, initProperties) {
+	  const elementClass = annotationTypes[resolveType(type)];
+	  let element = elements[index];
+	  if (!element || !(element instanceof elementClass)) {
+	    element = elements[index] = new elementClass();
+	    Object.assign(element, initProperties);
+	  }
+	  return element;
+	}
+
+	function resolveAnnotationOptions(resolver) {
+	  const elementClass = annotationTypes[resolveType(resolver.type)];
+	  const result = {};
+	  result.id = resolver.id;
+	  result.type = resolver.type;
+	  result.drawTime = resolver.drawTime;
+	  Object.assign(result,
+	    resolveObj(resolver, elementClass.defaults),
+	    resolveObj(resolver, elementClass.defaultRoutes));
+	  for (const hook of hooks$1) {
+	    result[hook] = resolver[hook];
+	  }
+	  return result;
+	}
+
+	function resolveObj(resolver, defs) {
+	  const result = {};
+	  for (const prop of Object.keys(defs)) {
+	    const optDefs = defs[prop];
+	    const value = resolver[prop];
+	    if (isIndexable(prop) && isArray(value)) {
+	      result[prop] = value.map((item) => resolve(item, optDefs));
+	    } else {
+	      result[prop] = resolve(value, optDefs);
+	    }
+	  }
+	  return result;
+	}
+
+	function getContext(chart, element, elements, annotation) {
+	  return element.$context || (element.$context = Object.assign(Object.create(chart.getContext()), {
+	    element,
+	    get elements() {
+	      return elements.filter((el) => el && el.options);
+	    },
+	    id: annotation.id,
+	    type: 'annotation'
+	  }));
+	}
+
+	function resyncElements(elements, annotations) {
+	  const count = annotations.length;
+	  const start = elements.length;
+
+	  if (start < count) {
+	    const add = count - start;
+	    elements.splice(start, 0, ...new Array(add));
+	  } else if (start > count) {
+	    elements.splice(count, start - count);
+	  }
+	  return elements;
+	}
+
+	var version = "3.1.0";
+
+	const chartStates = new Map();
+	const isNotDoughnutLabel = annotation => annotation.type !== 'doughnutLabel';
+	const hooks = eventHooks.concat(elementHooks);
+
+	var annotation = {
+	  id: 'annotation',
+
+	  version,
+
+	  beforeRegister() {
+	    requireVersion('chart.js', '4.0', Chart.version);
+	  },
+
+	  afterRegister() {
+	    Chart.register(annotationTypes);
+	  },
+
+	  afterUnregister() {
+	    Chart.unregister(annotationTypes);
+	  },
+
+	  beforeInit(chart) {
+	    chartStates.set(chart, {
+	      annotations: [],
+	      elements: [],
+	      visibleElements: [],
+	      listeners: {},
+	      listened: false,
+	      moveListened: false,
+	      hooks: {},
+	      hooked: false,
+	      hovered: []
+	    });
+	  },
+
+	  beforeUpdate(chart, args, options) {
+	    const state = chartStates.get(chart);
+	    const annotations = state.annotations = [];
+
+	    let annotationOptions = options.annotations;
+	    if (isObject(annotationOptions)) {
+	      Object.keys(annotationOptions).forEach(key => {
+	        const value = annotationOptions[key];
+	        if (isObject(value)) {
+	          value.id = key;
+	          annotations.push(value);
+	        }
+	      });
+	    } else if (isArray(annotationOptions)) {
+	      annotations.push(...annotationOptions);
+	    }
+	    verifyScaleOptions(annotations.filter(isNotDoughnutLabel), chart.scales);
+	  },
+
+	  afterDataLimits(chart, args) {
+	    const state = chartStates.get(chart);
+	    adjustScaleRange(chart, args.scale, state.annotations.filter(isNotDoughnutLabel).filter(a => a.display && a.adjustScaleRange));
+	  },
+
+	  afterUpdate(chart, args, options) {
+	    const state = chartStates.get(chart);
+	    updateListeners(chart, state, options);
+	    updateElements(chart, state, options, args.mode);
+	    state.visibleElements = state.elements.filter(el => !el.skip && el.options.display);
+	    updateHooks(chart, state, options);
+	  },
+
+	  beforeDatasetsDraw(chart, _args, options) {
+	    draw(chart, 'beforeDatasetsDraw', options.clip);
+	  },
+
+	  afterDatasetsDraw(chart, _args, options) {
+	    draw(chart, 'afterDatasetsDraw', options.clip);
+	  },
+
+	  beforeDatasetDraw(chart, _args, options) {
+	    draw(chart, _args.index, options.clip);
+	  },
+
+	  beforeDraw(chart, _args, options) {
+	    draw(chart, 'beforeDraw', options.clip);
+	  },
+
+	  afterDraw(chart, _args, options) {
+	    draw(chart, 'afterDraw', options.clip);
+	  },
+
+	  beforeEvent(chart, args, options) {
+	    const state = chartStates.get(chart);
+	    if (handleEvent(state, args.event, options)) {
+	      args.changed = true;
+	    }
+	  },
+
+	  afterDestroy(chart) {
+	    chartStates.delete(chart);
+	  },
+
+	  getAnnotations(chart) {
+	    const state = chartStates.get(chart);
+	    return state ? state.elements : [];
+	  },
+
+	  // only for testing
+	  _getAnnotationElementsAtEventForMode(visibleElements, event, options) {
+	    return getElements(visibleElements, event, options);
+	  },
+
+	  defaults: {
+	    animations: {
+	      numbers: {
+	        properties: ['x', 'y', 'x2', 'y2', 'width', 'height', 'centerX', 'centerY', 'pointX', 'pointY', 'radius'],
+	        type: 'number'
+	      },
+	      colors: {
+	        properties: ['backgroundColor', 'borderColor'],
+	        type: 'color'
+	      }
+	    },
+	    clip: true,
+	    interaction: {
+	      mode: undefined,
+	      axis: undefined,
+	      intersect: undefined
+	    },
+	    common: {
+	      drawTime: 'afterDatasetsDraw',
+	      init: false,
+	      label: {
+	      }
+	    }
+	  },
+
+	  descriptors: {
+	    _indexable: false,
+	    _scriptable: (prop) => !hooks.includes(prop) && prop !== 'init',
+	    annotations: {
+	      _allKeys: false,
+	      _fallback: (prop, opts) => `elements.${annotationTypes[resolveType(opts.type)].id}`
+	    },
+	    interaction: {
+	      _fallback: true
+	    },
+	    common: {
+	      label: {
+	        _indexable: isIndexable,
+	        _fallback: true
+	      },
+	      _indexable: isIndexable
+	    }
+	  },
+
+	  additionalOptionScopes: ['']
+	};
+
+	function draw(chart, caller, clip) {
+	  const {ctx, chartArea} = chart;
+	  const state = chartStates.get(chart);
+
+	  if (clip) {
+	    clipArea(ctx, chartArea);
+	  }
+
+	  const drawableElements = getDrawableElements(state.visibleElements, caller).sort((a, b) => a.element.options.z - b.element.options.z);
+	  for (const item of drawableElements) {
+	    drawElement(ctx, chartArea, state, item);
+	  }
+
+	  if (clip) {
+	    unclipArea(ctx);
+	  }
+	}
+
+	function getDrawableElements(elements, caller) {
+	  const drawableElements = [];
+	  for (const el of elements) {
+	    if (el.options.drawTime === caller) {
+	      drawableElements.push({element: el, main: true});
+	    }
+	    if (el.elements && el.elements.length) {
+	      for (const sub of el.elements) {
+	        if (sub.options.display && sub.options.drawTime === caller) {
+	          drawableElements.push({element: sub});
+	        }
+	      }
+	    }
+	  }
+	  return drawableElements;
+	}
+
+	function drawElement(ctx, chartArea, state, item) {
+	  const el = item.element;
+	  if (item.main) {
+	    invokeHook(state, el, 'beforeDraw');
+	    el.draw(ctx, chartArea);
+	    invokeHook(state, el, 'afterDraw');
+	  } else {
+	    el.draw(ctx, chartArea);
+	  }
+	}
+
+	/*!
+	 * chartjs-plugin-datalabels v2.2.0
+	 * https://chartjs-plugin-datalabels.netlify.app
+	 * (c) 2017-2022 chartjs-plugin-datalabels contributors
+	 * Released under the MIT license
+	 */
+
+	var devicePixelRatio = (function() {
+	  if (typeof window !== 'undefined') {
+	    if (window.devicePixelRatio) {
+	      return window.devicePixelRatio;
+	    }
+
+	    // devicePixelRatio is undefined on IE10
+	    // https://stackoverflow.com/a/20204180/8837887
+	    // https://github.com/chartjs/chartjs-plugin-datalabels/issues/85
+	    var screen = window.screen;
+	    if (screen) {
+	      return (screen.deviceXDPI || 1) / (screen.logicalXDPI || 1);
+	    }
+	  }
+
+	  return 1;
+	}());
+
+	var utils = {
+	  // @todo move this in Chart.helpers.toTextLines
+	  toTextLines: function(inputs) {
+	    var lines = [];
+	    var input;
+
+	    inputs = [].concat(inputs);
+	    while (inputs.length) {
+	      input = inputs.pop();
+	      if (typeof input === 'string') {
+	        lines.unshift.apply(lines, input.split('\n'));
+	      } else if (Array.isArray(input)) {
+	        inputs.push.apply(inputs, input);
+	      } else if (!isNullOrUndef(inputs)) {
+	        lines.unshift('' + input);
+	      }
+	    }
+
+	    return lines;
+	  },
+
+	  // @todo move this in Chart.helpers.canvas.textSize
+	  // @todo cache calls of measureText if font doesn't change?!
+	  textSize: function(ctx, lines, font) {
+	    var items = [].concat(lines);
+	    var ilen = items.length;
+	    var prev = ctx.font;
+	    var width = 0;
+	    var i;
+
+	    ctx.font = font.string;
+
+	    for (i = 0; i < ilen; ++i) {
+	      width = Math.max(ctx.measureText(items[i]).width, width);
+	    }
+
+	    ctx.font = prev;
+
+	    return {
+	      height: ilen * font.lineHeight,
+	      width: width
+	    };
+	  },
+
+	  /**
+	   * Returns value bounded by min and max. This is equivalent to max(min, min(value, max)).
+	   * @todo move this method in Chart.helpers.bound
+	   * https://doc.qt.io/qt-5/qtglobal.html#qBound
+	   */
+	  bound: function(min, value, max) {
+	    return Math.max(min, Math.min(value, max));
+	  },
+
+	  /**
+	   * Returns an array of pair [value, state] where state is:
+	   * * -1: value is only in a0 (removed)
+	   * *  1: value is only in a1 (added)
+	   */
+	  arrayDiff: function(a0, a1) {
+	    var prev = a0.slice();
+	    var updates = [];
+	    var i, j, ilen, v;
+
+	    for (i = 0, ilen = a1.length; i < ilen; ++i) {
+	      v = a1[i];
+	      j = prev.indexOf(v);
+
+	      if (j === -1) {
+	        updates.push([v, 1]);
+	      } else {
+	        prev.splice(j, 1);
+	      }
+	    }
+
+	    for (i = 0, ilen = prev.length; i < ilen; ++i) {
+	      updates.push([prev[i], -1]);
+	    }
+
+	    return updates;
+	  },
+
+	  /**
+	   * https://github.com/chartjs/chartjs-plugin-datalabels/issues/70
+	   */
+	  rasterize: function(v) {
+	    return Math.round(v * devicePixelRatio) / devicePixelRatio;
+	  }
+	};
+
+	function orient(point, origin) {
+	  var x0 = origin.x;
+	  var y0 = origin.y;
+
+	  if (x0 === null) {
+	    return {x: 0, y: -1};
+	  }
+	  if (y0 === null) {
+	    return {x: 1, y: 0};
+	  }
+
+	  var dx = point.x - x0;
+	  var dy = point.y - y0;
+	  var ln = Math.sqrt(dx * dx + dy * dy);
+
+	  return {
+	    x: ln ? dx / ln : 0,
+	    y: ln ? dy / ln : -1
+	  };
+	}
+
+	function aligned(x, y, vx, vy, align) {
+	  switch (align) {
+	  case 'center':
+	    vx = vy = 0;
+	    break;
+	  case 'bottom':
+	    vx = 0;
+	    vy = 1;
+	    break;
+	  case 'right':
+	    vx = 1;
+	    vy = 0;
+	    break;
+	  case 'left':
+	    vx = -1;
+	    vy = 0;
+	    break;
+	  case 'top':
+	    vx = 0;
+	    vy = -1;
+	    break;
+	  case 'start':
+	    vx = -vx;
+	    vy = -vy;
+	    break;
+	  case 'end':
+	    // keep natural orientation
+	    break;
+	  default:
+	    // clockwise rotation (in degree)
+	    align *= (Math.PI / 180);
+	    vx = Math.cos(align);
+	    vy = Math.sin(align);
+	    break;
+	  }
+
+	  return {
+	    x: x,
+	    y: y,
+	    vx: vx,
+	    vy: vy
+	  };
+	}
+
+	// Line clipping (Cohen–Sutherland algorithm)
+	// https://en.wikipedia.org/wiki/Cohen–Sutherland_algorithm
+
+	var R_INSIDE = 0;
+	var R_LEFT = 1;
+	var R_RIGHT = 2;
+	var R_BOTTOM = 4;
+	var R_TOP = 8;
+
+	function region(x, y, rect) {
+	  var res = R_INSIDE;
+
+	  if (x < rect.left) {
+	    res |= R_LEFT;
+	  } else if (x > rect.right) {
+	    res |= R_RIGHT;
+	  }
+	  if (y < rect.top) {
+	    res |= R_TOP;
+	  } else if (y > rect.bottom) {
+	    res |= R_BOTTOM;
+	  }
+
+	  return res;
+	}
+
+	function clipped(segment, area) {
+	  var x0 = segment.x0;
+	  var y0 = segment.y0;
+	  var x1 = segment.x1;
+	  var y1 = segment.y1;
+	  var r0 = region(x0, y0, area);
+	  var r1 = region(x1, y1, area);
+	  var r, x, y;
+
+	  // eslint-disable-next-line no-constant-condition
+	  while (true) {
+	    if (!(r0 | r1) || (r0 & r1)) {
+	      // both points inside or on the same side: no clipping
+	      break;
+	    }
+
+	    // at least one point is outside
+	    r = r0 || r1;
+
+	    if (r & R_TOP) {
+	      x = x0 + (x1 - x0) * (area.top - y0) / (y1 - y0);
+	      y = area.top;
+	    } else if (r & R_BOTTOM) {
+	      x = x0 + (x1 - x0) * (area.bottom - y0) / (y1 - y0);
+	      y = area.bottom;
+	    } else if (r & R_RIGHT) {
+	      y = y0 + (y1 - y0) * (area.right - x0) / (x1 - x0);
+	      x = area.right;
+	    } else if (r & R_LEFT) {
+	      y = y0 + (y1 - y0) * (area.left - x0) / (x1 - x0);
+	      x = area.left;
+	    }
+
+	    if (r === r0) {
+	      x0 = x;
+	      y0 = y;
+	      r0 = region(x0, y0, area);
+	    } else {
+	      x1 = x;
+	      y1 = y;
+	      r1 = region(x1, y1, area);
+	    }
+	  }
+
+	  return {
+	    x0: x0,
+	    x1: x1,
+	    y0: y0,
+	    y1: y1
+	  };
+	}
+
+	function compute$1(range, config) {
+	  var anchor = config.anchor;
+	  var segment = range;
+	  var x, y;
+
+	  if (config.clamp) {
+	    segment = clipped(segment, config.area);
+	  }
+
+	  if (anchor === 'start') {
+	    x = segment.x0;
+	    y = segment.y0;
+	  } else if (anchor === 'end') {
+	    x = segment.x1;
+	    y = segment.y1;
+	  } else {
+	    x = (segment.x0 + segment.x1) / 2;
+	    y = (segment.y0 + segment.y1) / 2;
+	  }
+
+	  return aligned(x, y, range.vx, range.vy, config.align);
+	}
+
+	var positioners = {
+	  arc: function(el, config) {
+	    var angle = (el.startAngle + el.endAngle) / 2;
+	    var vx = Math.cos(angle);
+	    var vy = Math.sin(angle);
+	    var r0 = el.innerRadius;
+	    var r1 = el.outerRadius;
+
+	    return compute$1({
+	      x0: el.x + vx * r0,
+	      y0: el.y + vy * r0,
+	      x1: el.x + vx * r1,
+	      y1: el.y + vy * r1,
+	      vx: vx,
+	      vy: vy
+	    }, config);
+	  },
+
+	  point: function(el, config) {
+	    var v = orient(el, config.origin);
+	    var rx = v.x * el.options.radius;
+	    var ry = v.y * el.options.radius;
+
+	    return compute$1({
+	      x0: el.x - rx,
+	      y0: el.y - ry,
+	      x1: el.x + rx,
+	      y1: el.y + ry,
+	      vx: v.x,
+	      vy: v.y
+	    }, config);
+	  },
+
+	  bar: function(el, config) {
+	    var v = orient(el, config.origin);
+	    var x = el.x;
+	    var y = el.y;
+	    var sx = 0;
+	    var sy = 0;
+
+	    if (el.horizontal) {
+	      x = Math.min(el.x, el.base);
+	      sx = Math.abs(el.base - el.x);
+	    } else {
+	      y = Math.min(el.y, el.base);
+	      sy = Math.abs(el.base - el.y);
+	    }
+
+	    return compute$1({
+	      x0: x,
+	      y0: y + sy,
+	      x1: x + sx,
+	      y1: y,
+	      vx: v.x,
+	      vy: v.y
+	    }, config);
+	  },
+
+	  fallback: function(el, config) {
+	    var v = orient(el, config.origin);
+
+	    return compute$1({
+	      x0: el.x,
+	      y0: el.y,
+	      x1: el.x + (el.width || 0),
+	      y1: el.y + (el.height || 0),
+	      vx: v.x,
+	      vy: v.y
+	    }, config);
+	  }
+	};
+
+	var rasterize = utils.rasterize;
+
+	function boundingRects(model) {
+	  var borderWidth = model.borderWidth || 0;
+	  var padding = model.padding;
+	  var th = model.size.height;
+	  var tw = model.size.width;
+	  var tx = -tw / 2;
+	  var ty = -th / 2;
+
+	  return {
+	    frame: {
+	      x: tx - padding.left - borderWidth,
+	      y: ty - padding.top - borderWidth,
+	      w: tw + padding.width + borderWidth * 2,
+	      h: th + padding.height + borderWidth * 2
+	    },
+	    text: {
+	      x: tx,
+	      y: ty,
+	      w: tw,
+	      h: th
+	    }
+	  };
+	}
+
+	function getScaleOrigin(el, context) {
+	  var scale = context.chart.getDatasetMeta(context.datasetIndex).vScale;
+
+	  if (!scale) {
+	    return null;
+	  }
+
+	  if (scale.xCenter !== undefined && scale.yCenter !== undefined) {
+	    return {x: scale.xCenter, y: scale.yCenter};
+	  }
+
+	  var pixel = scale.getBasePixel();
+	  return el.horizontal ?
+	    {x: pixel, y: null} :
+	    {x: null, y: pixel};
+	}
+
+	function getPositioner(el) {
+	  if (el instanceof ArcElement) {
+	    return positioners.arc;
+	  }
+	  if (el instanceof PointElement) {
+	    return positioners.point;
+	  }
+	  if (el instanceof BarElement) {
+	    return positioners.bar;
+	  }
+	  return positioners.fallback;
+	}
+
+	function drawRoundedRect(ctx, x, y, w, h, radius) {
+	  var HALF_PI = Math.PI / 2;
+
+	  if (radius) {
+	    var r = Math.min(radius, h / 2, w / 2);
+	    var left = x + r;
+	    var top = y + r;
+	    var right = x + w - r;
+	    var bottom = y + h - r;
+
+	    ctx.moveTo(x, top);
+	    if (left < right && top < bottom) {
+	      ctx.arc(left, top, r, -Math.PI, -HALF_PI);
+	      ctx.arc(right, top, r, -HALF_PI, 0);
+	      ctx.arc(right, bottom, r, 0, HALF_PI);
+	      ctx.arc(left, bottom, r, HALF_PI, Math.PI);
+	    } else if (left < right) {
+	      ctx.moveTo(left, y);
+	      ctx.arc(right, top, r, -HALF_PI, HALF_PI);
+	      ctx.arc(left, top, r, HALF_PI, Math.PI + HALF_PI);
+	    } else if (top < bottom) {
+	      ctx.arc(left, top, r, -Math.PI, 0);
+	      ctx.arc(left, bottom, r, 0, Math.PI);
+	    } else {
+	      ctx.arc(left, top, r, -Math.PI, Math.PI);
+	    }
+	    ctx.closePath();
+	    ctx.moveTo(x, y);
+	  } else {
+	    ctx.rect(x, y, w, h);
+	  }
+	}
+
+	function drawFrame(ctx, rect, model) {
+	  var bgColor = model.backgroundColor;
+	  var borderColor = model.borderColor;
+	  var borderWidth = model.borderWidth;
+
+	  if (!bgColor && (!borderColor || !borderWidth)) {
+	    return;
+	  }
+
+	  ctx.beginPath();
+
+	  drawRoundedRect(
+	    ctx,
+	    rasterize(rect.x) + borderWidth / 2,
+	    rasterize(rect.y) + borderWidth / 2,
+	    rasterize(rect.w) - borderWidth,
+	    rasterize(rect.h) - borderWidth,
+	    model.borderRadius);
+
+	  ctx.closePath();
+
+	  if (bgColor) {
+	    ctx.fillStyle = bgColor;
+	    ctx.fill();
+	  }
+
+	  if (borderColor && borderWidth) {
+	    ctx.strokeStyle = borderColor;
+	    ctx.lineWidth = borderWidth;
+	    ctx.lineJoin = 'miter';
+	    ctx.stroke();
+	  }
+	}
+
+	function textGeometry(rect, align, font) {
+	  var h = font.lineHeight;
+	  var w = rect.w;
+	  var x = rect.x;
+	  var y = rect.y + h / 2;
+
+	  if (align === 'center') {
+	    x += w / 2;
+	  } else if (align === 'end' || align === 'right') {
+	    x += w;
+	  }
+
+	  return {
+	    h: h,
+	    w: w,
+	    x: x,
+	    y: y
+	  };
+	}
+
+	function drawTextLine(ctx, text, cfg) {
+	  var shadow = ctx.shadowBlur;
+	  var stroked = cfg.stroked;
+	  var x = rasterize(cfg.x);
+	  var y = rasterize(cfg.y);
+	  var w = rasterize(cfg.w);
+
+	  if (stroked) {
+	    ctx.strokeText(text, x, y, w);
+	  }
+
+	  if (cfg.filled) {
+	    if (shadow && stroked) {
+	      // Prevent drawing shadow on both the text stroke and fill, so
+	      // if the text is stroked, remove the shadow for the text fill.
+	      ctx.shadowBlur = 0;
+	    }
+
+	    ctx.fillText(text, x, y, w);
+
+	    if (shadow && stroked) {
+	      ctx.shadowBlur = shadow;
+	    }
+	  }
+	}
+
+	function drawText(ctx, lines, rect, model) {
+	  var align = model.textAlign;
+	  var color = model.color;
+	  var filled = !!color;
+	  var font = model.font;
+	  var ilen = lines.length;
+	  var strokeColor = model.textStrokeColor;
+	  var strokeWidth = model.textStrokeWidth;
+	  var stroked = strokeColor && strokeWidth;
+	  var i;
+
+	  if (!ilen || (!filled && !stroked)) {
+	    return;
+	  }
+
+	  // Adjust coordinates based on text alignment and line height
+	  rect = textGeometry(rect, align, font);
+
+	  ctx.font = font.string;
+	  ctx.textAlign = align;
+	  ctx.textBaseline = 'middle';
+	  ctx.shadowBlur = model.textShadowBlur;
+	  ctx.shadowColor = model.textShadowColor;
+
+	  if (filled) {
+	    ctx.fillStyle = color;
+	  }
+	  if (stroked) {
+	    ctx.lineJoin = 'round';
+	    ctx.lineWidth = strokeWidth;
+	    ctx.strokeStyle = strokeColor;
+	  }
+
+	  for (i = 0, ilen = lines.length; i < ilen; ++i) {
+	    drawTextLine(ctx, lines[i], {
+	      stroked: stroked,
+	      filled: filled,
+	      w: rect.w,
+	      x: rect.x,
+	      y: rect.y + rect.h * i
+	    });
+	  }
+	}
+
+	var Label = function(config, ctx, el, index) {
+	  var me = this;
+
+	  me._config = config;
+	  me._index = index;
+	  me._model = null;
+	  me._rects = null;
+	  me._ctx = ctx;
+	  me._el = el;
+	};
+
+	merge(Label.prototype, {
+	  /**
+	   * @private
+	   */
+	  _modelize: function(display, lines, config, context) {
+	    var me = this;
+	    var index = me._index;
+	    var font = toFont(resolve$1([config.font, {}], context, index));
+	    var color = resolve$1([config.color, defaults$1.color], context, index);
+
+	    return {
+	      align: resolve$1([config.align, 'center'], context, index),
+	      anchor: resolve$1([config.anchor, 'center'], context, index),
+	      area: context.chart.chartArea,
+	      backgroundColor: resolve$1([config.backgroundColor, null], context, index),
+	      borderColor: resolve$1([config.borderColor, null], context, index),
+	      borderRadius: resolve$1([config.borderRadius, 0], context, index),
+	      borderWidth: resolve$1([config.borderWidth, 0], context, index),
+	      clamp: resolve$1([config.clamp, false], context, index),
+	      clip: resolve$1([config.clip, false], context, index),
+	      color: color,
+	      display: display,
+	      font: font,
+	      lines: lines,
+	      offset: resolve$1([config.offset, 4], context, index),
+	      opacity: resolve$1([config.opacity, 1], context, index),
+	      origin: getScaleOrigin(me._el, context),
+	      padding: toPadding(resolve$1([config.padding, 4], context, index)),
+	      positioner: getPositioner(me._el),
+	      rotation: resolve$1([config.rotation, 0], context, index) * (Math.PI / 180),
+	      size: utils.textSize(me._ctx, lines, font),
+	      textAlign: resolve$1([config.textAlign, 'start'], context, index),
+	      textShadowBlur: resolve$1([config.textShadowBlur, 0], context, index),
+	      textShadowColor: resolve$1([config.textShadowColor, color], context, index),
+	      textStrokeColor: resolve$1([config.textStrokeColor, color], context, index),
+	      textStrokeWidth: resolve$1([config.textStrokeWidth, 0], context, index)
+	    };
+	  },
+
+	  update: function(context) {
+	    var me = this;
+	    var model = null;
+	    var rects = null;
+	    var index = me._index;
+	    var config = me._config;
+	    var value, label, lines;
+
+	    // We first resolve the display option (separately) to avoid computing
+	    // other options in case the label is hidden (i.e. display: false).
+	    var display = resolve$1([config.display, true], context, index);
+
+	    if (display) {
+	      value = context.dataset.data[index];
+	      label = valueOrDefault(callback(config.formatter, [value, context]), value);
+	      lines = isNullOrUndef(label) ? [] : utils.toTextLines(label);
+
+	      if (lines.length) {
+	        model = me._modelize(display, lines, config, context);
+	        rects = boundingRects(model);
+	      }
+	    }
+
+	    me._model = model;
+	    me._rects = rects;
+	  },
+
+	  geometry: function() {
+	    return this._rects ? this._rects.frame : {};
+	  },
+
+	  rotation: function() {
+	    return this._model ? this._model.rotation : 0;
+	  },
+
+	  visible: function() {
+	    return this._model && this._model.opacity;
+	  },
+
+	  model: function() {
+	    return this._model;
+	  },
+
+	  draw: function(chart, center) {
+	    var me = this;
+	    var ctx = chart.ctx;
+	    var model = me._model;
+	    var rects = me._rects;
+	    var area;
+
+	    if (!this.visible()) {
+	      return;
+	    }
+
+	    ctx.save();
+
+	    if (model.clip) {
+	      area = model.area;
+	      ctx.beginPath();
+	      ctx.rect(
+	        area.left,
+	        area.top,
+	        area.right - area.left,
+	        area.bottom - area.top);
+	      ctx.clip();
+	    }
+
+	    ctx.globalAlpha = utils.bound(0, model.opacity, 1);
+	    ctx.translate(rasterize(center.x), rasterize(center.y));
+	    ctx.rotate(model.rotation);
+
+	    drawFrame(ctx, rects.frame, model);
+	    drawText(ctx, model.lines, rects.text, model);
+
+	    ctx.restore();
+	  }
+	});
+
+	var MIN_INTEGER = Number.MIN_SAFE_INTEGER || -9007199254740991; // eslint-disable-line es/no-number-minsafeinteger
+	var MAX_INTEGER = Number.MAX_SAFE_INTEGER || 9007199254740991;  // eslint-disable-line es/no-number-maxsafeinteger
+
+	function rotated(point, center, angle) {
+	  var cos = Math.cos(angle);
+	  var sin = Math.sin(angle);
+	  var cx = center.x;
+	  var cy = center.y;
+
+	  return {
+	    x: cx + cos * (point.x - cx) - sin * (point.y - cy),
+	    y: cy + sin * (point.x - cx) + cos * (point.y - cy)
+	  };
+	}
+
+	function projected(points, axis) {
+	  var min = MAX_INTEGER;
+	  var max = MIN_INTEGER;
+	  var origin = axis.origin;
+	  var i, pt, vx, vy, dp;
+
+	  for (i = 0; i < points.length; ++i) {
+	    pt = points[i];
+	    vx = pt.x - origin.x;
+	    vy = pt.y - origin.y;
+	    dp = axis.vx * vx + axis.vy * vy;
+	    min = Math.min(min, dp);
+	    max = Math.max(max, dp);
+	  }
+
+	  return {
+	    min: min,
+	    max: max
+	  };
+	}
+
+	function toAxis(p0, p1) {
+	  var vx = p1.x - p0.x;
+	  var vy = p1.y - p0.y;
+	  var ln = Math.sqrt(vx * vx + vy * vy);
+
+	  return {
+	    vx: (p1.x - p0.x) / ln,
+	    vy: (p1.y - p0.y) / ln,
+	    origin: p0,
+	    ln: ln
+	  };
+	}
+
+	var HitBox = function() {
+	  this._rotation = 0;
+	  this._rect = {
+	    x: 0,
+	    y: 0,
+	    w: 0,
+	    h: 0
+	  };
+	};
+
+	merge(HitBox.prototype, {
+	  center: function() {
+	    var r = this._rect;
+	    return {
+	      x: r.x + r.w / 2,
+	      y: r.y + r.h / 2
+	    };
+	  },
+
+	  update: function(center, rect, rotation) {
+	    this._rotation = rotation;
+	    this._rect = {
+	      x: rect.x + center.x,
+	      y: rect.y + center.y,
+	      w: rect.w,
+	      h: rect.h
+	    };
+	  },
+
+	  contains: function(point) {
+	    var me = this;
+	    var margin = 1;
+	    var rect = me._rect;
+
+	    point = rotated(point, me.center(), -me._rotation);
+
+	    return !(point.x < rect.x - margin
+	      || point.y < rect.y - margin
+	      || point.x > rect.x + rect.w + margin * 2
+	      || point.y > rect.y + rect.h + margin * 2);
+	  },
+
+	  // Separating Axis Theorem
+	  // https://gamedevelopment.tutsplus.com/tutorials/collision-detection-using-the-separating-axis-theorem--gamedev-169
+	  intersects: function(other) {
+	    var r0 = this._points();
+	    var r1 = other._points();
+	    var axes = [
+	      toAxis(r0[0], r0[1]),
+	      toAxis(r0[0], r0[3])
+	    ];
+	    var i, pr0, pr1;
+
+	    if (this._rotation !== other._rotation) {
+	      // Only separate with r1 axis if the rotation is different,
+	      // else it's enough to separate r0 and r1 with r0 axis only!
+	      axes.push(
+	        toAxis(r1[0], r1[1]),
+	        toAxis(r1[0], r1[3])
+	      );
+	    }
+
+	    for (i = 0; i < axes.length; ++i) {
+	      pr0 = projected(r0, axes[i]);
+	      pr1 = projected(r1, axes[i]);
+
+	      if (pr0.max < pr1.min || pr1.max < pr0.min) {
+	        return false;
+	      }
+	    }
+
+	    return true;
+	  },
+
+	  /**
+	   * @private
+	   */
+	  _points: function() {
+	    var me = this;
+	    var rect = me._rect;
+	    var angle = me._rotation;
+	    var center = me.center();
+
+	    return [
+	      rotated({x: rect.x, y: rect.y}, center, angle),
+	      rotated({x: rect.x + rect.w, y: rect.y}, center, angle),
+	      rotated({x: rect.x + rect.w, y: rect.y + rect.h}, center, angle),
+	      rotated({x: rect.x, y: rect.y + rect.h}, center, angle)
+	    ];
+	  }
+	});
+
+	function coordinates(el, model, geometry) {
+	  var point = model.positioner(el, model);
+	  var vx = point.vx;
+	  var vy = point.vy;
+
+	  if (!vx && !vy) {
+	    // if aligned center, we don't want to offset the center point
+	    return {x: point.x, y: point.y};
+	  }
+
+	  var w = geometry.w;
+	  var h = geometry.h;
+
+	  // take in account the label rotation
+	  var rotation = model.rotation;
+	  var dx = Math.abs(w / 2 * Math.cos(rotation)) + Math.abs(h / 2 * Math.sin(rotation));
+	  var dy = Math.abs(w / 2 * Math.sin(rotation)) + Math.abs(h / 2 * Math.cos(rotation));
+
+	  // scale the unit vector (vx, vy) to get at least dx or dy equal to
+	  // w or h respectively (else we would calculate the distance to the
+	  // ellipse inscribed in the bounding rect)
+	  var vs = 1 / Math.max(Math.abs(vx), Math.abs(vy));
+	  dx *= vx * vs;
+	  dy *= vy * vs;
+
+	  // finally, include the explicit offset
+	  dx += model.offset * vx;
+	  dy += model.offset * vy;
+
+	  return {
+	    x: point.x + dx,
+	    y: point.y + dy
+	  };
+	}
+
+	function collide(labels, collider) {
+	  var i, j, s0, s1;
+
+	  // IMPORTANT Iterate in the reverse order since items at the end of the
+	  // list have an higher weight/priority and thus should be less impacted
+	  // by the overlapping strategy.
+
+	  for (i = labels.length - 1; i >= 0; --i) {
+	    s0 = labels[i].$layout;
+
+	    for (j = i - 1; j >= 0 && s0._visible; --j) {
+	      s1 = labels[j].$layout;
+
+	      if (s1._visible && s0._box.intersects(s1._box)) {
+	        collider(s0, s1);
+	      }
+	    }
+	  }
+
+	  return labels;
+	}
+
+	function compute(labels) {
+	  var i, ilen, label, state, geometry, center, proxy;
+
+	  // Initialize labels for overlap detection
+	  for (i = 0, ilen = labels.length; i < ilen; ++i) {
+	    label = labels[i];
+	    state = label.$layout;
+
+	    if (state._visible) {
+	      // Chart.js 3 removed el._model in favor of getProps(), making harder to
+	      // abstract reading values in positioners. Also, using string arrays to
+	      // read values (i.e. var {a,b,c} = el.getProps(["a","b","c"])) would make
+	      // positioners inefficient in the normal case (i.e. not the final values)
+	      // and the code a bit ugly, so let's use a Proxy instead.
+	      proxy = new Proxy(label._el, {get: (el, p) => el.getProps([p], true)[p]});
+
+	      geometry = label.geometry();
+	      center = coordinates(proxy, label.model(), geometry);
+	      state._box.update(center, geometry, label.rotation());
+	    }
+	  }
+
+	  // Auto hide overlapping labels
+	  return collide(labels, function(s0, s1) {
+	    var h0 = s0._hidable;
+	    var h1 = s1._hidable;
+
+	    if ((h0 && h1) || h1) {
+	      s1._visible = false;
+	    } else if (h0) {
+	      s0._visible = false;
+	    }
+	  });
+	}
+
+	var layout = {
+	  prepare: function(datasets) {
+	    var labels = [];
+	    var i, j, ilen, jlen, label;
+
+	    for (i = 0, ilen = datasets.length; i < ilen; ++i) {
+	      for (j = 0, jlen = datasets[i].length; j < jlen; ++j) {
+	        label = datasets[i][j];
+	        labels.push(label);
+	        label.$layout = {
+	          _box: new HitBox(),
+	          _hidable: false,
+	          _visible: true,
+	          _set: i,
+	          _idx: label._index
+	        };
+	      }
+	    }
+
+	    // TODO New `z` option: labels with a higher z-index are drawn
+	    // of top of the ones with a lower index. Lowest z-index labels
+	    // are also discarded first when hiding overlapping labels.
+	    labels.sort(function(a, b) {
+	      var sa = a.$layout;
+	      var sb = b.$layout;
+
+	      return sa._idx === sb._idx
+	        ? sb._set - sa._set
+	        : sb._idx - sa._idx;
+	    });
+
+	    this.update(labels);
+
+	    return labels;
+	  },
+
+	  update: function(labels) {
+	    var dirty = false;
+	    var i, ilen, label, model, state;
+
+	    for (i = 0, ilen = labels.length; i < ilen; ++i) {
+	      label = labels[i];
+	      model = label.model();
+	      state = label.$layout;
+	      state._hidable = model && model.display === 'auto';
+	      state._visible = label.visible();
+	      dirty |= state._hidable;
+	    }
+
+	    if (dirty) {
+	      compute(labels);
+	    }
+	  },
+
+	  lookup: function(labels, point) {
+	    var i, state;
+
+	    // IMPORTANT Iterate in the reverse order since items at the end of
+	    // the list have an higher z-index, thus should be picked first.
+
+	    for (i = labels.length - 1; i >= 0; --i) {
+	      state = labels[i].$layout;
+
+	      if (state && state._visible && state._box.contains(point)) {
+	        return labels[i];
+	      }
+	    }
+
+	    return null;
+	  },
+
+	  draw: function(chart, labels) {
+	    var i, ilen, label, state, geometry, center;
+
+	    for (i = 0, ilen = labels.length; i < ilen; ++i) {
+	      label = labels[i];
+	      state = label.$layout;
+
+	      if (state._visible) {
+	        geometry = label.geometry();
+	        center = coordinates(label._el, label.model(), geometry);
+	        state._box.update(center, geometry, label.rotation());
+	        label.draw(chart, center);
+	      }
+	    }
+	  }
+	};
+
+	var formatter = function(value) {
+	  if (isNullOrUndef(value)) {
+	    return null;
+	  }
+
+	  var label = value;
+	  var keys, klen, k;
+	  if (isObject(value)) {
+	    if (!isNullOrUndef(value.label)) {
+	      label = value.label;
+	    } else if (!isNullOrUndef(value.r)) {
+	      label = value.r;
+	    } else {
+	      label = '';
+	      keys = Object.keys(value);
+	      for (k = 0, klen = keys.length; k < klen; ++k) {
+	        label += (k !== 0 ? ', ' : '') + keys[k] + ': ' + value[keys[k]];
+	      }
+	    }
+	  }
+
+	  return '' + label;
+	};
+
+	/**
+	 * IMPORTANT: make sure to also update tests and TypeScript definition
+	 * files (`/test/specs/defaults.spec.js` and `/types/options.d.ts`)
+	 */
+
+	var defaults = {
+	  align: 'center',
+	  anchor: 'center',
+	  backgroundColor: null,
+	  borderColor: null,
+	  borderRadius: 0,
+	  borderWidth: 0,
+	  clamp: false,
+	  clip: false,
+	  color: undefined,
+	  display: true,
+	  font: {
+	    family: undefined,
+	    lineHeight: 1.2,
+	    size: undefined,
+	    style: undefined,
+	    weight: null
+	  },
+	  formatter: formatter,
+	  labels: undefined,
+	  listeners: {},
+	  offset: 4,
+	  opacity: 1,
+	  padding: {
+	    top: 4,
+	    right: 4,
+	    bottom: 4,
+	    left: 4
+	  },
+	  rotation: 0,
+	  textAlign: 'start',
+	  textStrokeColor: undefined,
+	  textStrokeWidth: 0,
+	  textShadowBlur: 0,
+	  textShadowColor: undefined
+	};
+
+	/**
+	 * @see https://github.com/chartjs/Chart.js/issues/4176
+	 */
+
+	var EXPANDO_KEY = '$datalabels';
+	var DEFAULT_KEY = '$default';
+
+	function configure(dataset, options) {
+	  var override = dataset.datalabels;
+	  var listeners = {};
+	  var configs = [];
+	  var labels, keys;
+
+	  if (override === false) {
+	    return null;
+	  }
+	  if (override === true) {
+	    override = {};
+	  }
+
+	  options = merge({}, [options, override]);
+	  labels = options.labels || {};
+	  keys = Object.keys(labels);
+	  delete options.labels;
+
+	  if (keys.length) {
+	    keys.forEach(function(key) {
+	      if (labels[key]) {
+	        configs.push(merge({}, [
+	          options,
+	          labels[key],
+	          {_key: key}
+	        ]));
+	      }
+	    });
+	  } else {
+	    // Default label if no "named" label defined.
+	    configs.push(options);
+	  }
+
+	  // listeners: {<event-type>: {<label-key>: <fn>}}
+	  listeners = configs.reduce(function(target, config) {
+	    each(config.listeners || {}, function(fn, event) {
+	      target[event] = target[event] || {};
+	      target[event][config._key || DEFAULT_KEY] = fn;
+	    });
+
+	    delete config.listeners;
+	    return target;
+	  }, {});
+
+	  return {
+	    labels: configs,
+	    listeners: listeners
+	  };
+	}
+
+	function dispatchEvent(chart, listeners, label, event) {
+	  if (!listeners) {
+	    return;
+	  }
+
+	  var context = label.$context;
+	  var groups = label.$groups;
+	  var callback$1;
+
+	  if (!listeners[groups._set]) {
+	    return;
+	  }
+
+	  callback$1 = listeners[groups._set][groups._key];
+	  if (!callback$1) {
+	    return;
+	  }
+
+	  if (callback(callback$1, [context, event]) === true) {
+	    // Users are allowed to tweak the given context by injecting values that can be
+	    // used in scriptable options to display labels differently based on the current
+	    // event (e.g. highlight an hovered label). That's why we update the label with
+	    // the output context and schedule a new chart render by setting it dirty.
+	    chart[EXPANDO_KEY]._dirty = true;
+	    label.update(context);
+	  }
+	}
+
+	function dispatchMoveEvents(chart, listeners, previous, label, event) {
+	  var enter, leave;
+
+	  if (!previous && !label) {
+	    return;
+	  }
+
+	  if (!previous) {
+	    enter = true;
+	  } else if (!label) {
+	    leave = true;
+	  } else if (previous !== label) {
+	    leave = enter = true;
+	  }
+
+	  if (leave) {
+	    dispatchEvent(chart, listeners.leave, previous, event);
+	  }
+	  if (enter) {
+	    dispatchEvent(chart, listeners.enter, label, event);
+	  }
+	}
+
+	function handleMoveEvents(chart, event) {
+	  var expando = chart[EXPANDO_KEY];
+	  var listeners = expando._listeners;
+	  var previous, label;
+
+	  if (!listeners.enter && !listeners.leave) {
+	    return;
+	  }
+
+	  if (event.type === 'mousemove') {
+	    label = layout.lookup(expando._labels, event);
+	  } else if (event.type !== 'mouseout') {
+	    return;
+	  }
+
+	  previous = expando._hovered;
+	  expando._hovered = label;
+	  dispatchMoveEvents(chart, listeners, previous, label, event);
+	}
+
+	function handleClickEvents(chart, event) {
+	  var expando = chart[EXPANDO_KEY];
+	  var handlers = expando._listeners.click;
+	  var label = handlers && layout.lookup(expando._labels, event);
+	  if (label) {
+	    dispatchEvent(chart, handlers, label, event);
+	  }
+	}
+
+	var plugin = {
+	  id: 'datalabels',
+
+	  defaults: defaults,
+
+	  beforeInit: function(chart) {
+	    chart[EXPANDO_KEY] = {
+	      _actives: []
+	    };
+	  },
+
+	  beforeUpdate: function(chart) {
+	    var expando = chart[EXPANDO_KEY];
+	    expando._listened = false;
+	    expando._listeners = {};     // {<event-type>: {<dataset-index>: {<label-key>: <fn>}}}
+	    expando._datasets = [];      // per dataset labels: [Label[]]
+	    expando._labels = [];        // layouted labels: Label[]
+	  },
+
+	  afterDatasetUpdate: function(chart, args, options) {
+	    var datasetIndex = args.index;
+	    var expando = chart[EXPANDO_KEY];
+	    var labels = expando._datasets[datasetIndex] = [];
+	    var visible = chart.isDatasetVisible(datasetIndex);
+	    var dataset = chart.data.datasets[datasetIndex];
+	    var config = configure(dataset, options);
+	    var elements = args.meta.data || [];
+	    var ctx = chart.ctx;
+	    var i, j, ilen, jlen, cfg, key, el, label;
+
+	    ctx.save();
+
+	    for (i = 0, ilen = elements.length; i < ilen; ++i) {
+	      el = elements[i];
+	      el[EXPANDO_KEY] = [];
+
+	      if (visible && el && chart.getDataVisibility(i) && !el.skip) {
+	        for (j = 0, jlen = config.labels.length; j < jlen; ++j) {
+	          cfg = config.labels[j];
+	          key = cfg._key;
+
+	          label = new Label(cfg, ctx, el, i);
+	          label.$groups = {
+	            _set: datasetIndex,
+	            _key: key || DEFAULT_KEY
+	          };
+	          label.$context = {
+	            active: false,
+	            chart: chart,
+	            dataIndex: i,
+	            dataset: dataset,
+	            datasetIndex: datasetIndex
+	          };
+
+	          label.update(label.$context);
+	          el[EXPANDO_KEY].push(label);
+	          labels.push(label);
+	        }
+	      }
+	    }
+
+	    ctx.restore();
+
+	    // Store listeners at the chart level and per event type to optimize
+	    // cases where no listeners are registered for a specific event.
+	    merge(expando._listeners, config.listeners, {
+	      merger: function(event, target, source) {
+	        target[event] = target[event] || {};
+	        target[event][args.index] = source[event];
+	        expando._listened = true;
+	      }
+	    });
+	  },
+
+	  afterUpdate: function(chart) {
+	    chart[EXPANDO_KEY]._labels = layout.prepare(chart[EXPANDO_KEY]._datasets);
+	  },
+
+	  // Draw labels on top of all dataset elements
+	  // https://github.com/chartjs/chartjs-plugin-datalabels/issues/29
+	  // https://github.com/chartjs/chartjs-plugin-datalabels/issues/32
+	  afterDatasetsDraw: function(chart) {
+	    layout.draw(chart, chart[EXPANDO_KEY]._labels);
+	  },
+
+	  beforeEvent: function(chart, args) {
+	    // If there is no listener registered for this chart, `listened` will be false,
+	    // meaning we can immediately ignore the incoming event and avoid useless extra
+	    // computation for users who don't implement label interactions.
+	    if (chart[EXPANDO_KEY]._listened) {
+	      var event = args.event;
+	      switch (event.type) {
+	      case 'mousemove':
+	      case 'mouseout':
+	        handleMoveEvents(chart, event);
+	        break;
+	      case 'click':
+	        handleClickEvents(chart, event);
+	        break;
+	      }
+	    }
+	  },
+
+	  afterEvent: function(chart) {
+	    var expando = chart[EXPANDO_KEY];
+	    var previous = expando._actives;
+	    var actives = expando._actives = chart.getActiveElements();
+	    var updates = utils.arrayDiff(previous, actives);
+	    var i, ilen, j, jlen, update, label, labels;
+
+	    for (i = 0, ilen = updates.length; i < ilen; ++i) {
+	      update = updates[i];
+	      if (update[1]) {
+	        labels = update[0].element[EXPANDO_KEY] || [];
+	        for (j = 0, jlen = labels.length; j < jlen; ++j) {
+	          label = labels[j];
+	          label.$context.active = (update[1] === 1);
+	          label.update(label.$context);
+	        }
+	      }
+	    }
+
+	    if (expando._dirty || updates.length) {
+	      layout.update(expando._labels);
+	      chart.render();
+	    }
+
+	    delete expando._dirty;
+	  }
+	};
+
+	function createCumulativeStartEndRangesFromValues(array, base_value) {
+	    var cumulative = 0;
+	    return array.map(function (value, index) {
+	        if (index === 0) {
+	            cumulative = base_value;
+	        }
+	        var start = cumulative;
+	        cumulative += value;
+	        return [start, cumulative];
+	    });
+	}
+
+	DeepDiveChart[FILENAME] = 'src/ce_mlflow_extension/templates/components/DeepDiveChart.svelte';
+
+	var root$1 = add_locations(from_html(`<canvas class="svelte-1mf6xd3"></canvas>`), DeepDiveChart[FILENAME], [[403, 2]]);
+
+	function DeepDiveChart($$anchor, $$props) {
 		check_target(new.target);
-		push($$props, true, ImportanceChart);
+		push($$props, true, DeepDiveChart);
 
-		// Chart.js will be loaded globally via script tag
-		let importanceValues = prop($$props, 'importanceValues', 19, () => []),
-			featureNames = prop($$props, 'featureNames', 19, () => []),
-			title = prop($$props, 'title', 3, "Feature Importance");
+		// import { colorMap } from '$lib/helpers/colormap';
+		// Register the necessary components
+		Chart.register(BarController, BarElement, CategoryScale, LinearScale, plugin_title, plugin_tooltip, plugin_legend, annotation);
 
-		let chartContainer = tag(state(void 0), 'chartContainer');
-		let chart = tag(state(void 0), 'chart');
-		let maxImportance = tag(user_derived(() => Math.max(...importanceValues().map((value) => Math.abs(value)))), 'maxImportance');
+		console.log("DeepDiveChart: Chart components registered");
 
-		// Effect to initialize the chart when container is ready
-		user_effect(() => {
-			if (!get(chartContainer)) return;
+		// For feature value mapping
+		// Optional prop to determine if higher output is better
+		prop($$props, 'featureEncodings', 19, () => [{}]);
+			let isHigherOutputBetter = prop($$props, 'isHigherOutputBetter', 3, false);
 
-			console.log('ImportanceChart: Initializing chart container');
-
-			// Cleanup function when container changes or component unmounts
-			return () => {
-				if (get(chart)) {
-					console.log('ImportanceChart: Cleaning up chart');
-					get(chart).destroy();
-					set$1(chart, null);
-				}
-			};
-		});
-
-		// Effect to create/update chart when data changes
-		user_effect(() => {
-			if (!get(chartContainer) || !window.Chart) return;
-
-			console.log('ImportanceChart: Data effect triggered');
-			console.log(...log_if_contains_state('log', 'importanceValues:', importanceValues()));
-			console.log(...log_if_contains_state('log', 'featureNames:', featureNames()));
-
-			// If no data, destroy chart and return
-			if (!importanceValues().length) {
-				if (get(chart)) {
-					get(chart).destroy();
-					set$1(chart, null);
-				}
-
-				return;
+		function setBaseValue(baseValues) {
+			if (equals(baseValues.length, 2)) {
+				base_value = baseValues[1];
+			} else if (strict_equals(typeof baseValues, 'number')) {
+				base_value = baseValues;
+			} else if (baseValues.length > 1) {
+				base_value = baseValues[0];
+			} else {
+				base_value = baseValues[0];
 			}
+		}
 
-			try {
-				// If chart exists, just update the data
-				if (get(chart)) {
-					console.log('ImportanceChart: Updating existing chart');
-					get(chart).data.labels = featureNames();
-					get(chart).data.datasets[0].data = importanceValues();
-					get(chart).options.plugins.title.text = title();
+		// todo: we should check fi this is a regression or whatever type we are using and fix things for that
+		let base_value;
 
-					// Update the y-axis max value properly
-					get(chart).options.scales.y.max = get(maxImportance) * 1.1;
+		setBaseValue($$props.baseValues);
+		console.log(...log_if_contains_state('log', "baseValues in DeepDiveChart", $$props.baseValues, base_value));
 
-					console.log(...log_if_contains_state('log', 'ImportanceChart: Setting y-axis max to:', get(maxImportance) * 1.1));
-					get(chart // Use default update to apply all changes
-					).update();
-				} else {
-					// Create new chart
-					console.log('ImportanceChart: Creating new chart');
+		let chart;
+		let chartCanvas;
+		let maxOfData;
+		let minOfData;
+		let pointBackgroundColor;
+		let cumulativeValues;
+		let maxCumulativeValue;
 
-					const ctx = get(chartContainer).getContext('2d');
+		function updateChart(singleShapValues, singleFeatureValues) {
+			maxOfData = Math.max(...singleShapValues);
+			minOfData = Math.min(...singleShapValues);
 
-					set$1(
-						chart,
-						new window.Chart(ctx, {
-							type: 'bar',
+			// Color mapping based on isHigherOutputBetter prop
+			pointBackgroundColor = singleShapValues.map((d) => {
+				const normalizedValue = (d - minOfData) / (maxOfData - minOfData) * 100;
 
-							data: {
-								labels: featureNames(),
+				// If higher output is better, use inverted color mapping (green=high, red=low)
+				// If higher output is NOT better, use normal color mapping (red=high, green=low)
+				const colorValue = isHigherOutputBetter() ? 100 - normalizedValue : normalizedValue;
 
-								datasets: [
-									{
-										label: 'Importance',
-										data: importanceValues(),
-										backgroundColor: 'rgba(54, 162, 235, 0.2)',
-										borderColor: 'rgba(54, 162, 235, 1)',
-										borderWidth: 1
-									}
-								]
-							},
+				// return colorMap(colorValue);
+				return colorValue;
+			});
 
-							options: {
-								responsive: true,
-								maintainAspectRatio: false,
-								animation: { duration: 0 // Disable animations to prevent effect loops
-								 },
+			console.log(...log_if_contains_state('log', "Max of Data", maxOfData));
+			console.log(...log_if_contains_state('log', "Min of Data", minOfData));
 
-								scales: {
-									y: { beginAtZero: true, grid: { color: 'rgba(0, 0, 0, 0.1)' } },
+			if (chart) {
+				chart.data.labels = $$props.featureNames;
+				cumulativeValues = createCumulativeStartEndRangesFromValues(singleShapValues, base_value);
+				chart.data.datasets[0].data = cumulativeValues;
+				maxCumulativeValue = Math.max(...cumulativeValues.map((d) => d[1]));
+				console.log(...log_if_contains_state('log', "Max Cumulative Value", maxCumulativeValue));
 
-									x: {
-										max: get(maxImportance // Limit to 1.1 times the max importance
-										) * 1.1,
-										grid: { display: false }
-									}
-								},
+				// chart.data.datasets[0].data[0][0] += base_value;
+				chart.data.datasets[0].backgroundColor = pointBackgroundColor;
 
-								plugins: {
-									legend: { display: false },
+				// Update x-axis rotation based on screen size
+				if (chart.options.scales?.x?.ticks) {
+					const isLargeScreen = window.innerWidth >= 1720;
+					const isMediumScreen = window.innerWidth < 1024;
 
-									title: {
-										display: true,
-										text: title(),
-										font: { size: 16, weight: 'bold' }
-									}
+					chart.options.scales.x.ticks.maxRotation = isLargeScreen ? 45 : 90;
+					chart.options.scales.x.ticks.minRotation = isLargeScreen ? 0 : 90;
+					chart.options.scales.x.ticks.font = { size: window.innerWidth < 768 ? 8 : isMediumScreen ? 10 : 12 };
+				}
+
+				// Update y-axis font size
+				if (chart.options.scales?.y?.ticks) {
+					const isSmallScreen = window.innerWidth < 768;
+					const isMediumScreen = window.innerWidth < 1024;
+
+					chart.options.scales.y.ticks.font = { size: isSmallScreen ? 8 : isMediumScreen ? 10 : 12 };
+				}
+
+				// Update layout padding
+				if (chart.options.layout?.padding) {
+					const isSmallScreen = window.innerWidth < 768;
+
+					chart.options.layout.padding = {
+						top: isSmallScreen ? 40 : 60,
+						bottom: isSmallScreen ? 5 : 10,
+						left: isSmallScreen ? 5 : 10,
+						right: isSmallScreen ? 5 : 10
+					};
+				}
+
+				// Update datalabels font size and offset
+				if (chart.options.plugins?.datalabels) {
+					const isLargeScreen = window.innerWidth >= 1560;
+					const isSmallScreen = window.innerWidth < 768;
+					const isMediumScreen = window.innerWidth < 1024;
+
+					chart.options.plugins.datalabels.display = isLargeScreen; // Only show on large screens
+
+					chart.options.plugins.datalabels.font = {
+						weight: 'bold',
+						size: isSmallScreen ? 8 : isMediumScreen ? 9 : 10
+					};
+
+					chart.options.plugins.datalabels.offset = isSmallScreen ? 2 : 5;
+				}
+
+				chart.update();
+			}
+		}
+
+		let featureValuesSorted = [];
+
+		user_effect(() => updateChart($$props.shapValues[$$props.observationIndex], $$props.featureValues[$$props.observationIndex]));
+
+		// Handle screen resize for responsive label rotation
+		function handleResize() {
+			if (chart && chart.options.scales?.x?.ticks) {
+				const isLargeScreen = window.innerWidth >= 1560;
+				const isSmallScreen = window.innerWidth < 768;
+				const isMediumScreen = window.innerWidth < 1024;
+
+				// Update x-axis
+				chart.options.scales.x.ticks.maxRotation = isLargeScreen ? 45 : 90;
+
+				chart.options.scales.x.ticks.minRotation = isLargeScreen ? 0 : 90;
+				chart.options.scales.x.ticks.font = { size: isSmallScreen ? 8 : isMediumScreen ? 10 : 12 };
+
+				// Update y-axis
+				if (chart.options.scales?.y?.ticks) {
+					chart.options.scales.y.ticks.font = { size: isSmallScreen ? 8 : isMediumScreen ? 10 : 12 };
+				}
+
+				// Update layout padding
+				if (chart.options.layout?.padding) {
+					chart.options.layout.padding = {
+						top: isSmallScreen ? 40 : 60,
+						bottom: isSmallScreen ? 5 : 10,
+						left: isSmallScreen ? 5 : 10,
+						right: isSmallScreen ? 5 : 10
+					};
+				}
+
+				// Update datalabels
+				if (chart.options.plugins?.datalabels) {
+					chart.options.plugins.datalabels.display = isLargeScreen; // Only show on large screens
+
+					chart.options.plugins.datalabels.font = {
+						weight: 'bold',
+						size: isSmallScreen ? 8 : isMediumScreen ? 9 : 10
+					};
+
+					chart.options.plugins.datalabels.offset = isSmallScreen ? 2 : 5;
+				}
+
+				chart.update('none'); // Update without animation for smoother resize
+			}
+		}
+
+		onMount(() => {
+			// sort feature names by featureOrder
+			// let sortedFeatureNames = explanationSummary.sort((a, b) => b.importance - a.importance).map((d) => d.feature_name);
+			// let sortedFeatures = modelFeatures.sort((a, b) => sortedFeatureNames.indexOf(a.feature_name) - sortedFeatureNames.indexOf(b.feature_name));
+			// let sortedIdx = modelFeatures.sort((a, b) => sortedFeatureNames.indexOf(a.feature_name) - sortedFeatureNames.indexOf(b.feature_name)).map((d) => d.feature_order);
+			//  const sortedFeatures = modelFeatures.sort((a, b) => a.feature_order - b.feature_order
+			//                                          );
+			//  
+			maxOfData = Math.max(...$$props.shapValues[0]);
+
+			minOfData = Math.min(...$$props.shapValues[0]);
+
+			// Color mapping based on isHigherOutputBetter prop
+			pointBackgroundColor = $$props.shapValues.map((d) => {
+				const normalizedValue = (d - minOfData) / (maxOfData - minOfData) * 100;
+
+				// If higher output is better, use inverted color mapping (green=high, red=low)
+				// If higher output is NOT better, use normal color mapping (red=high, green=low)
+				const colorValue = isHigherOutputBetter() ? 100 - normalizedValue : normalizedValue;
+
+				// return colorMap(colorValue);
+				return colorValue;
+			});
+
+			const data = {
+				labels: $$props.featureNames,
+
+				datasets: [
+					{
+						label: 'SHAP Values',
+						data: createCumulativeStartEndRangesFromValues($$props.shapValues, base_value),
+						pointBackgroundColor
+					}
+				]
+			};
+
+			console.log(...log_if_contains_state('log', "IN DEEPDIVE data", data));
+
+			const config = {
+				type: 'bar',
+				plugins: [plugin],
+				data,
+
+				options: {
+					indexAxis: 'x', // This makes the bar chart vertical
+
+					layout: {
+						padding: {
+							top: window.innerWidth < 768 ? 40 : 60,
+							bottom: window.innerWidth < 768 ? 5 : 10,
+							left: window.innerWidth < 768 ? 5 : 10,
+							right: window.innerWidth < 768 ? 5 : 10
+						}
+					},
+
+					scales: {
+						x: {
+							beginAtZero: true,
+
+							ticks: {
+								maxRotation: window.innerWidth < 1980 ? 90 : 45,
+								minRotation: window.innerWidth < 1980 ? 90 : 0,
+
+								font: {
+									size: window.innerWidth < 768 ? 8 : window.innerWidth < 1024 ? 10 : 12
 								}
 							}
-						}),
-						true
-					);
+						},
 
-					console.log('ImportanceChart: Chart created successfully');
+						y: {
+							min: 0,
+							max: Math.floor(maxCumulativeValue * 1.3),
+
+							ticks: {
+								font: {
+									size: window.innerWidth < 768 ? 8 : window.innerWidth < 1024 ? 10 : 12
+								}
+							}
+						}
+					},
+
+					plugins: {
+						legend: { display: false },
+
+						annotation: {
+							annotations: {
+								baseline: {
+									type: 'line',
+									yMin: base_value,
+									yMax: base_value,
+									borderColor: 'rgb(255, 99, 132)',
+									borderWidth: 2,
+									borderDash: [6, 6],
+									label: { enabled: true, content: 'Baseline', position: 'end' }
+								}
+							}
+						},
+
+						datalabels: {
+							display: window.innerWidth >= 1980, // Only show on large screens
+							clamp: true,
+							anchor: 'end',
+							align: 'top',
+							color: '#737373',
+
+							font: {
+								weight: 'bold',
+								size: window.innerWidth < 768 ? 8 : window.innerWidth < 1024 ? 9 : 10
+							},
+
+							offset: window.innerWidth < 768 ? 2 : 5,
+
+							formatter(value, context) {
+								const index = context.dataIndex;
+
+								// const description = featureDescriptions[index]; // Description not needed for datalabel
+								let featureValue = featureValuesSorted[index];
+
+								if (strict_equals(featureValueNameMapping[index], null, false)) {
+									// ... existing console logs ...
+									featureValue = featureValueNameMapping[index][featureValue];
+								}
+
+								let diff = value[1] - value[0];
+
+								const shapLabel = diff > 0
+									? `▲ ${Math.round(diff * 100) / 100}`
+									: `▼ ${Math.round(diff * 100) / 100}`;
+
+								// Helper function to break text into lines with max 10 characters each
+								function breakTextIntoLines(text, maxCharsPerLine = 10) {
+									if (text.length <= maxCharsPerLine) {
+										return [text];
+									}
+
+									const lines = [];
+									const words = text.split(/[\s-_/]+/); // Split on whitespace, hyphens, underscores, slashes
+									let currentLine = '';
+
+									for (const word of words) {
+										if (word.length > maxCharsPerLine) {
+											// If word itself is too long, break it
+											if (currentLine) {
+												lines.push(currentLine);
+												currentLine = '';
+											}
+
+											// Break long word into chunks
+											for (let i = 0; i < word.length; i += maxCharsPerLine) {
+												lines.push(word.slice(i, i + maxCharsPerLine));
+											}
+										} else if ((currentLine + (currentLine ? ' ' : '') + word).length <= maxCharsPerLine) {
+											currentLine += (currentLine ? ' ' : '') + word;
+										} else {
+											if (currentLine) {
+												lines.push(currentLine);
+											}
+
+											currentLine = word;
+										}
+									}
+
+									if (currentLine) {
+										lines.push(currentLine);
+									}
+
+									return lines;
+								}
+
+								// Convert featureValue to string and break into lines
+								const featureValueStr = String(featureValue);
+
+								const featureLines = breakTextIntoLines(featureValueStr, 10);
+
+								// Limit number of lines on small screens
+								const maxLines = window.innerWidth < 768 ? 2 : 3;
+
+								const displayLines = featureLines.slice(0, maxLines);
+
+								return [shapLabel, ...displayLines];
+							}
+						},
+
+						tooltip: {
+							callbacks: {
+								label(context) {
+									const index = context.dataIndex;
+									const description = featureDescriptions[index];
+									let featureValue = featureValuesSorted[index];
+									let displayValue = featureValue; // Use a different variable for display
+
+									if (strict_equals(featureValueNameMapping[index], null, false)) {
+										// console.log("IN DEEPDIVE json_information", featureValueNameMapping[index], featureValue);
+										// console.log("IN DEEPDIVE featureValueNameMapping", featureValue);
+										displayValue = featureValueNameMapping[index][featureValue];
+									}
+
+									// Calculate the difference for the SHAP value display
+									let diff = 0;
+
+									if (Array.isArray(context.raw) && strict_equals(context.raw.length, 2)) {
+										diff = context.raw[1] - context.raw[0];
+									}
+
+									// Display the difference in the tooltip, not the raw range
+									const shapLabel = `${context.dataset.label}: ${Math.round(diff * 100) / 100}`;
+
+									// Ensure displayValue is a string for the tooltip line
+									return [shapLabel, `${description}: ${String(displayValue)}`];
+								}
+							}
+						}
+					}
 				}
-			} catch(error) {
-				console.error(...log_if_contains_state('error', 'ImportanceChart: Error with chart:', error));
+			};
+
+			chart = new Chart(chartCanvas, config);
+			updateChart(modelFeatures, explanationDetail);
+
+			// Add resize event listener
+			window.addEventListener('resize', handleResize);
+		});
+
+		onDestroy(() => {
+			// Remove resize event listener
+			window.removeEventListener('resize', handleResize);
+
+			if (chart) {
+				chart.destroy();
 			}
 		});
 
-		var div = root$1();
-		var canvas = child(div);
+		var canvas = root$1();
 
-		bind_this(canvas, ($$value) => set$1(chartContainer, $$value), () => get(chartContainer));
-		append($$anchor, div);
+		bind_this(canvas, ($$value) => chartCanvas = $$value, () => chartCanvas);
+		append($$anchor, canvas);
 
 		return pop({ ...legacy_api() });
 	}
 
-	SimpleDisplay[FILENAME] = 'src/ce_mlflow_extension/templates/components/SimpleDisplay.svelte';
+	DeepDiveManager[FILENAME] = 'src/ce_mlflow_extension/templates/components/DeepDiveManager.svelte';
 
-	var root = add_locations(from_html(`<div class="simple-display svelte-9tixt6"><h2 class="svelte-9tixt6"> </h2> <div class="number svelte-9tixt6"> </div> <p class="svelte-9tixt6">This number was passed from Python and displayed via Svelte!</p></div>`), SimpleDisplay[FILENAME], [[8, 0, [[9, 4], [10, 4], [11, 4]]]]);
+	var root_1 = add_locations(from_html(`<option> </option>`), DeepDiveManager[FILENAME], [[65, 12]]);
+	var root = add_locations(from_html(`<div class="observation-dropdown"><label for="observation-select">Select Observation:</label> <select id="observation-select"></select> <button>Prev</button> <button>Next</button></div> <!>`, 1), DeepDiveManager[FILENAME], [[61, 0, [[62, 4], [63, 4], [68, 4], [69, 4]]]]);
 
-	function SimpleDisplay($$anchor, $$props) {
+	function DeepDiveManager($$anchor, $$props) {
 		check_target(new.target);
-		push($$props, true, SimpleDisplay);
+		push($$props, true, DeepDiveManager);
 
-		let randomNumber = prop($$props, 'randomNumber', 3, 42),
-			title = prop($$props, 'title', 3, "Random Number Display");
+		// For feature value mapping
+		// Optional prop to determine if higher output is better
+		// Optional prop for feature names
+		const maxDisplayedValues = 10;
 
-		var div = root();
-		var h2 = child(div);
-		var text = child(h2);
+		let featureEncodings = prop($$props, 'featureEncodings', 19, () => [{}]),
+			isHigherOutputBetter = prop($$props, 'isHigherOutputBetter', 3, false),
+			featureNames = prop($$props, 'featureNames', 19, () => []);
 
-		var div_1 = sibling(h2, 2);
-		var text_1 = child(div_1);
+		let selectedObservationIndex = tag(state(0), 'selectedObservationIndex');
+		let currentPage = tag(state(0), 'currentPage');
+		let totalObservations = $$props.shapValues.length;
+		let totalPages = Math.ceil(totalObservations / maxDisplayedValues);
 
-		template_effect(() => {
-			set_text(text, title());
-			set_text(text_1, randomNumber());
+		let pagedObservations = tag(
+			user_derived(() => Array.from(
+				{
+					length: Math.min(maxDisplayedValues, totalObservations - get(currentPage) * maxDisplayedValues)
+				},
+				(_, i) => {
+					const idx = i + get(currentPage) * maxDisplayedValues;
+
+					return { name: `Observation ${idx + 1}`, index: idx };
+				}
+			)),
+			'pagedObservations'
+		);
+
+		function nextPage() {
+			if (get(currentPage) < totalPages - 1) {
+				set$1(currentPage, get(currentPage) + 1);
+			}
+		}
+
+		function prevPage() {
+			if (get(currentPage) > 0) {
+				set$1(currentPage, get(currentPage) - 1);
+			}
+		}
+
+		user_effect(() => {
+			console.log(...log_if_contains_state('log', 'Selected observation index:', get(selectedObservationIndex)));
+			console.log(...log_if_contains_state('log', 'Current page:', get(currentPage)));
+			console.log(...log_if_contains_state('log', 'Total pages:', totalPages));
 		});
 
-		append($$anchor, div);
+		var fragment = root();
+		var div = first_child(fragment);
+		var select = sibling(child(div), 2);
+
+		add_svelte_meta(
+			() => each$1(select, 21, () => get(pagedObservations), index, ($$anchor, obs) => {
+				var option = root_1();
+				var text = child(option, true);
+
+				reset(option);
+
+				var option_value = {};
+
+				template_effect(() => {
+					set_text(text, get(obs).name);
+
+					if (option_value !== (option_value = get(obs).index)) {
+						option.value = (option.__value = get(obs).index) ?? '';
+					}
+				});
+
+				append($$anchor, option);
+			}),
+			'each',
+			DeepDiveManager,
+			64,
+			8
+		);
+
+		var button = sibling(select, 2);
+		var button_1 = sibling(button, 2);
+
+		var node = sibling(div, 2);
+
+		add_svelte_meta(
+			() => DeepDiveChart(node, {
+				get shapValues() {
+					return $$props.shapValues;
+				},
+
+				get featureValues() {
+					return $$props.featureValues;
+				},
+
+				get selectedFeatureIndex() {
+					return $$props.selectedFeatureIndex;
+				},
+
+				get selectedFeature() {
+					return $$props.selectedFeature;
+				},
+
+				get baseValues() {
+					return $$props.baseValues;
+				},
+
+				get featureEncodings() {
+					return featureEncodings();
+				},
+
+				get isHigherOutputBetter() {
+					return isHigherOutputBetter();
+				},
+
+				get featureNames() {
+					return featureNames();
+				}
+			}),
+			'component',
+			DeepDiveManager,
+			71,
+			0,
+			{ componentTag: 'DeepDiveChart' }
+		);
+
+		template_effect(() => {
+			button.disabled = strict_equals(get(currentPage), 0);
+			button_1.disabled = strict_equals(get(currentPage), totalPages - 1);
+		});
+
+		bind_select_value(select, () => get(selectedObservationIndex), ($$value) => set$1(selectedObservationIndex, $$value));
+		event('click', button, prevPage);
+		event('click', button_1, nextPage);
+		append($$anchor, fragment);
 
 		return pop({ ...legacy_api() });
 	}
@@ -16764,10 +23111,10 @@ ${properties}`
 	// Export components immediately
 	window.DevComponents = {
 	  ChartManager,
-	  ImportanceChart,
 	  ImportanceChart2,
-	  SimpleDisplay,
-	  ScatterShapValues
+	  ScatterShapValues,
+	  DeepDiveManager,
+	  DeepDiveChart
 	};
 
 	// Export Svelte 5 mount function
@@ -16780,6 +23127,7 @@ ${properties}`
 	  let sampleShapValues = [];
 	  let sampleFeatureValues = [];
 	  let sampleBaseValues = [];
+	  let sampleFeatureEncodings = {};
 
 	  try {
 	    // Fetch the test data file
@@ -16798,6 +23146,8 @@ ${properties}`
 	      } else {
 	        sampleImportanceData = [];
 	      }
+	      
+	      console.log("Feature Encodings", testReportData.feature_encodings );
 	      
 	      sampleShapValues = testReportData.shap_values || [];
 	      sampleFeatureValues = testReportData.feature_values || [];

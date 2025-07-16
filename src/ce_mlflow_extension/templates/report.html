@@ -139,6 +139,15 @@
         </div>
     </div>
 
+    <div class="container">
+        <h1>DeepDive>
+        <!-- Feature Importance Chart -->
+        <!-- New Interactive Feature Importance Chart -->
+        <div class="section">
+            <div id="deepdivemanager-container"></div>
+        </div>
+    </div>
+
     <!-- Load Chart.js from CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
@@ -184,6 +193,27 @@
                 console.error('ChartManager component not found or no data provided');
                 console.log('window.ChartManager exists:', !!window.ChartManager);
                 console.log('importanceData exists:', !!importanceData);
+            }
+
+            if (window.DeepDiveManager) {
+                try {
+                    new window.DeepDiveManager({
+                        target: document.getElementById('deepdivemanager-container'),
+                        props: {
+                            featureNames: importanceData.features,
+                            shapValues: shapValues,
+                            featureValues: featureValues,
+                            baseValues: baseValues,
+                            featureEncodings: featureEncodings
+                        }
+                    });
+                    console.log('DeepDiveManager mounted successfully!');
+                } catch (error) {
+                    console.error('Error mounting DeepDiveManager:', error);
+                }
+            } else {
+                console.error('DeepDiveManager component not found or no data provided');
+                console.log('window.DeepDiveManager exists:', !!window.ChartManager);
             }
         });
     </script>

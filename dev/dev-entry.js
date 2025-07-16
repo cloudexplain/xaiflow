@@ -1,18 +1,18 @@
 // Development entry point for testing Svelte components
 import { mount } from 'svelte';
 import ChartManager from '../src/ce_mlflow_extension/templates/components/ChartManager.svelte';
-import ImportanceChart from '../src/ce_mlflow_extension/templates/components/ImportanceChart.svelte';
 import ImportanceChart2 from '../src/ce_mlflow_extension/templates/components/ImportanceChart2.svelte';
-import SimpleDisplay from '../src/ce_mlflow_extension/templates/components/SimpleDisplay.svelte';
 import ScatterShapValues from '../src/ce_mlflow_extension/templates/components/ScatterShapValues.svelte';
+import DeepDiveManager from '../src/ce_mlflow_extension/templates/components/DeepDiveManager.svelte';
+import DeepDiveChart from '../src/ce_mlflow_extension/templates/components/DeepDiveChart.svelte';
 
 // Export components immediately
 window.DevComponents = {
   ChartManager,
-  ImportanceChart,
   ImportanceChart2,
-  SimpleDisplay,
-  ScatterShapValues
+  ScatterShapValues,
+  DeepDiveManager,
+  DeepDiveChart
 };
 
 // Export Svelte 5 mount function
@@ -25,6 +25,7 @@ async function loadTestData() {
   let sampleShapValues = [];
   let sampleFeatureValues = [];
   let sampleBaseValues = [];
+  let sampleFeatureEncodings = {};
 
   try {
     // Fetch the test data file
@@ -43,6 +44,8 @@ async function loadTestData() {
       } else {
         sampleImportanceData = [];
       }
+      
+      console.log("Feature Encodings", testReportData.feature_encodings );
       
       sampleShapValues = testReportData.shap_values || [];
       sampleFeatureValues = testReportData.feature_values || [];
