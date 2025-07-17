@@ -1,11 +1,11 @@
 """
-Xflow Package
+xaiflow Package
 
 This package provides MLflow integration for generating interactive HTML reports
 with SHAP analysis using Svelte and Chart.js.
 """
 
-from .mlflow_plugin import CEMLflowPlugin
+from .mlflow_plugin import XaiflowPlugin
 from .report_generator import ReportGenerator
 
 __version__ = "0.1.0"

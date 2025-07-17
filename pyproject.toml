@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=80.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "xflow"
-version = "0.1.0"
+name = "xaiflow"
+version = "0.1.0rc2"
 description = "MLflow integration library for generating interactive HTML reports with SHAP analysis using Svelte and Chart.js"
 authors = [
     {name = "CloudExplain Team", email = "tobias@cloudexplain.eu"}
@@ -30,14 +30,11 @@ classifiers = [
 ]
 keywords = ["mlflow", "machine learning", "explainability", "shap", "visualization", "html", "reports"]
 dependencies = [
-    "mlflow>=2.0.0",
-    "shap>=0.40.0",
-    "numpy>=1.20.0",
-    "pandas>=1.3.0",
-    "scikit-learn>=1.0.0",
-    "jinja2>=3.0.0",
-    "matplotlib>=3.5.0",
-    "seaborn>=0.11.0",
+    "mlflow",
+    "numpy",
+    "pandas",
+    "scikit-learn",
+    "jinja2",
 ]
 
 [project.optional-dependencies]
@@ -60,7 +57,7 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-xflow = [
+xaiflow = [
     "templates/*.html",
     "templates/assets/bundle.js",
     "templates/assets/bundle.js.map",

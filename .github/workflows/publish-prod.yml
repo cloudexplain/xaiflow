@@ -62,7 +62,7 @@ jobs:
           ## Installation
           
           ```bash
-          pip install xflow==${{ steps.extract_version.outputs.version }}
+          pip install xaiflow==${{ steps.extract_version.outputs.version }}
           ```
         draft: false
         prerelease: false

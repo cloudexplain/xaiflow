@@ -1,13 +1,13 @@
-# Contributing to Xflow
+# Contributing to xaiflow
 
-Thank you for your interest in contributing to Xflow. This document outlines how to contribute to the project.
+Thank you for your interest in contributing to xaiflow. This document outlines how to contribute to the project.
 
 ## Development Setup
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/cloudexplain/xflow
-cd xflow
+git clone https://github.com/cloudexplain/xaiflow
+cd xaiflow
 ```
 
 2. Create a virtual environment:
@@ -29,7 +29,7 @@ pip install -e ".[dev]"
 ## Project Structure
 
 The project is organized as follows:
-- `src/xflow/` - Main package code
+- `src/xaiflow/` - Main package code
 - `tests/` - Test suites
 - `dev/` - Development tools and frontend build scripts
 - `pyproject.toml` - Package configuration
@@ -60,7 +60,7 @@ The frontend components are built with Svelte and compiled to `bundle.js`. If yo
 2. Install Node.js dependencies: `npm install`
 3. Make your changes to Svelte components
 4. Build the bundle: `npm run build`
-5. Copy the built files to `src/xflow/templates/assets/`
+5. Copy the built files to `src/xaiflow/templates/assets/`
 
 ## Submitting Changes
 

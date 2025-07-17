@@ -15,7 +15,7 @@ from .report_generator import ReportGenerator
 from shap import Explanation
 
 
-class CEMLflowPlugin:
+class XaiflowPlugin:
     """
     CE MLflow Extension Plugin for generating and storing interactive HTML reports
     """
@@ -271,19 +271,19 @@ class CEMLflowPlugin:
                 base_values = base_values.tolist()
         
         # Save all data to be used in the report
-        with open('test_report_data.json', 'w', encoding='utf-8') as f:
-            data_to_save = {
-                "random_number": random_number,
-                "timestamp": current_time,
-                "importance_data": importance_data,  # Already Python dict
-                "shap_values": shap_values,  # Now Python list
-                "feature_values": feature_values,  # Now Python list or None
-                "base_values": base_values,  # Now Python list or None
-                "feature_encodings": feature_encodings,  # Optional encodings
-                "feature_names": feature_names,  # List of feature names
-            }
-            json.dump(data_to_save, f, indent=2)
-            print(f"Saved report data to test_report_data.json")
+        # with open('test_report_data.json', 'w', encoding='utf-8') as f:
+        #     data_to_save = {
+        #         "random_number": random_number,
+        #         "timestamp": current_time,
+        #         "importance_data": importance_data,  # Already Python dict
+        #         "shap_values": shap_values,  # Now Python list
+        #         "feature_values": feature_values,  # Now Python list or None
+        #         "base_values": base_values,  # Now Python list or None
+        #         "feature_encodings": feature_encodings,  # Optional encodings
+        #         "feature_names": feature_names,  # List of feature names
+        #     }
+        #     json.dump(data_to_save, f, indent=2)
+        #     print(f"Saved report data to test_report_data.json")
         
         # Render the template with data (no json.dumps needed since Jinja2 handles it)
         html_content = template.render(
@@ -300,10 +300,6 @@ class CEMLflowPlugin:
         
         # Write to file
         with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(html_content)
-
-        with open('test_report.html', 'w', encoding='utf-8') as f:
-            print('logged to test_report.html')
             f.write(html_content)
     
     def get_report_url(self, run_id: str, artifact_path: str = "reports", report_name: str = "feature_importance_report.html") -> str:

@@ -19,7 +19,7 @@ from sklearn.preprocessing import LabelEncoder
 
 
 try:
-    from xflow.mlflow_plugin import CEMLflowPlugin
+    from xaiflow.mlflow_plugin import CEMLflowPlugin
     print("✅ Successfully imported CEMLflowPlugin")
 except Exception as e:
     print(f"❌ Error importing plugin: {e}")

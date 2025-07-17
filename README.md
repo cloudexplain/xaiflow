@@ -1,10 +1,10 @@
-# Xflow
+# xaiflow
 
 **Interactive Explainable AI Reports for MLflow**
 
 > **Note**: This library is in early development and the API may change. Use with caution in production environments.
 
-Xflow integrates seamlessly with MLflow to generate interactive HTML reports for SHAP analysis. Instead of static charts and images, you get rich, interactive visualizations that stakeholders can explore and understand.
+xaiflow integrates seamlessly with MLflow to generate interactive HTML reports for SHAP analysis. Instead of static charts and images, you get rich, interactive visualizations that stakeholders can explore and understand.
 
 ## What We're Trying to Achieve
 
@@ -14,7 +14,7 @@ Most ML workflows produce explanations as static images or basic charts, which c
 - You can't dive deep into individual predictions and their explanations
 - Sharing comprehensive model insights with non-technical teams is challenging
 
-Xflow solves this by providing a simple integration with MLflow that automatically generates interactive HTML reports. You get:
+xaiflow solves this by providing a simple integration with MLflow that automatically generates interactive HTML reports. You get:
 - Interactive feature importance charts that respond to clicks and filters
 - SHAP value visualizations that show exactly how each feature contributes
 - Deep dive analysis for specific predictions and feature interactions
@@ -25,7 +25,7 @@ Xflow solves this by providing a simple integration with MLflow that automatical
 
 ```python
 import mlflow
-from xflow import CEMLflowPlugin
+from xaiflow import CEMLflowPlugin
 
 # Your existing MLflow training code
 with mlflow.start_run():
@@ -50,8 +50,8 @@ That's it. Your MLflow experiment now includes an interactive HTML report that s
 ## Project Structure
 
 ```
-xflow/
-├── src/xflow/                          # Main package
+xaiflow/
+├── src/xaiflow/                          # Main package
 │   ├── __init__.py                     # Package exports
 │   ├── mlflow_plugin.py                # MLflow integration
 │   ├── report_generator.py             # HTML report generation
@@ -104,13 +104,13 @@ The HTML output works in any browser without dependencies. Reports are self-cont
 ## Installation
 
 ```bash
-pip install xflow
+pip install xaiflow
 ```
 
 For development:
 ```bash
-git clone https://github.com/cloudexplain/xflow
-cd xflow
+git clone https://github.com/cloudexplain/xaiflow
+cd xaiflow
 pip install -e .
 ```
 

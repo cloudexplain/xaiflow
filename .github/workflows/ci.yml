@@ -33,7 +33,7 @@ jobs:
     - name: Test package installation
       run: |
         pip install -e .
-        python -c "from xflow import CEMLflowPlugin, ReportGenerator; print('Import successful')"
+        python -c "from xaiflow import CEMLflowPlugin, ReportGenerator; print('Import successful')"
     
     - name: Test basic functionality
       run: |
