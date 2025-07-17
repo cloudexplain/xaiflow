@@ -55,7 +55,7 @@ def test_plugin():
         rfc.fit(X, y)
         ex = shap.TreeExplainer(rfc)
         shap_values = ex(X)
-        import pdb; pdb.set_trace()
+        
         plugin = XaiflowPlugin()
         print("✅ Plugin initialized successfully")
 

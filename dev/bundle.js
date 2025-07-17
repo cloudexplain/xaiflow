@@ -141,6 +141,22 @@
 	}
 
 	/**
+	 * Using `bind:value` together with a checkbox input is not allowed. Use `bind:checked` instead
+	 * @returns {never}
+	 */
+	function bind_invalid_checkbox_value() {
+		if (DEV) {
+			const error = new Error(`bind_invalid_checkbox_value\nUsing \`bind:value\` together with a checkbox input is not allowed. Use \`bind:checked\` instead\nhttps://svelte.dev/e/bind_invalid_checkbox_value`);
+
+			error.name = 'Svelte error';
+
+			throw error;
+		} else {
+			throw new Error(`https://svelte.dev/e/bind_invalid_checkbox_value`);
+		}
+	}
+
+	/**
 	 * Calling `%method%` on a component instance (of %component%) is no longer valid in Svelte 5
 	 * @param {string} method
 	 * @param {string} component
@@ -394,17 +410,6 @@
 			console.warn(`%c[svelte] legacy_recursive_reactive_block\n%cDetected a migrated \`$:\` reactive block in \`${filename}\` that both accesses and updates the same reactive value. This may cause recursive updates when converted to an \`$effect\`.\nhttps://svelte.dev/e/legacy_recursive_reactive_block`, bold$1, normal$1);
 		} else {
 			console.warn(`https://svelte.dev/e/legacy_recursive_reactive_block`);
-		}
-	}
-
-	/**
-	 * The `value` property of a `<select multiple>` element should be an array, but it received a non-array value. The selection will be kept as is.
-	 */
-	function select_multiple_invalid_value() {
-		if (DEV) {
-			console.warn(`%c[svelte] select_multiple_invalid_value\n%cThe \`value\` property of a \`<select multiple>\` element should be an array, but it received a non-array value. The selection will be kept as is.\nhttps://svelte.dev/e/select_multiple_invalid_value`, bold$1, normal$1);
-		} else {
-			console.warn(`https://svelte.dev/e/select_multiple_invalid_value`);
 		}
 	}
 
@@ -2390,14 +2395,6 @@ ${properties}`
 		return value;
 	}
 
-	/**
-	 * @param {any} a
-	 * @param {any} b
-	 */
-	function is(a, b) {
-		return Object.is(get_proxied_value(a), get_proxied_value(b));
-	}
-
 	function init_array_prototype_warnings() {
 		const array_prototype = Array.prototype;
 		// The REPL ends up here over and over, and this prevents it from adding more and more patches
@@ -4369,6 +4366,113 @@ ${properties}`
 		};
 	}
 
+	/** @import { Effect, TemplateNode } from '#client' */
+	/** @import { Batch } from '../../reactivity/batch.js'; */
+
+	// TODO reinstate https://github.com/sveltejs/svelte/pull/15250
+
+	/**
+	 * @param {TemplateNode} node
+	 * @param {(branch: (fn: (anchor: Node) => void, flag?: boolean) => void) => void} fn
+	 * @param {boolean} [elseif] True if this is an `{:else if ...}` block rather than an `{#if ...}`, as that affects which transitions are considered 'local'
+	 * @returns {void}
+	 */
+	function if_block(node, fn, elseif = false) {
+
+		var anchor = node;
+
+		/** @type {Effect | null} */
+		var consequent_effect = null;
+
+		/** @type {Effect | null} */
+		var alternate_effect = null;
+
+		/** @type {UNINITIALIZED | boolean | null} */
+		var condition = UNINITIALIZED;
+
+		var flags = elseif ? EFFECT_TRANSPARENT : 0;
+
+		var has_branch = false;
+
+		const set_branch = (/** @type {(anchor: Node) => void} */ fn, flag = true) => {
+			has_branch = true;
+			update_branch(flag, fn);
+		};
+
+		/** @type {DocumentFragment | null} */
+		var offscreen_fragment = null;
+
+		function commit() {
+			if (offscreen_fragment !== null) {
+				// remove the anchor
+				/** @type {Text} */ (offscreen_fragment.lastChild).remove();
+
+				anchor.before(offscreen_fragment);
+				offscreen_fragment = null;
+			}
+
+			var active = condition ? consequent_effect : alternate_effect;
+			var inactive = condition ? alternate_effect : consequent_effect;
+
+			if (active) {
+				resume_effect(active);
+			}
+
+			if (inactive) {
+				pause_effect(inactive, () => {
+					if (condition) {
+						alternate_effect = null;
+					} else {
+						consequent_effect = null;
+					}
+				});
+			}
+		}
+
+		const update_branch = (
+			/** @type {boolean | null} */ new_condition,
+			/** @type {null | ((anchor: Node) => void)} */ fn
+		) => {
+			if (condition === (condition = new_condition)) return;
+
+			var defer = should_defer_append();
+			var target = anchor;
+
+			if (defer) {
+				offscreen_fragment = document.createDocumentFragment();
+				offscreen_fragment.append((target = create_text()));
+			}
+
+			if (condition) {
+				consequent_effect ??= fn && branch(() => fn(target));
+			} else {
+				alternate_effect ??= fn && branch(() => fn(target));
+			}
+
+			if (defer) {
+				var batch = /** @type {Batch} */ (current_batch);
+
+				var active = condition ? consequent_effect : alternate_effect;
+				var inactive = condition ? alternate_effect : consequent_effect;
+
+				if (active) batch.skipped_effects.delete(active);
+				if (inactive) batch.skipped_effects.add(inactive);
+
+				batch.add_callback(commit);
+			} else {
+				commit();
+			}
+		};
+
+		block(() => {
+			has_branch = false;
+			fn(set_branch);
+			if (!has_branch) {
+				update_branch(null, null);
+			}
+		}, flags);
+	}
+
 	/** @import { EachItem, EachState, Effect, MaybeSource, Source, TemplateNode, TransitionManager, Value } from '#client' */
 	/** @import { Batch } from '../../reactivity/batch.js'; */
 
@@ -4438,12 +4542,6 @@ ${properties}`
 
 		/** @type {EachState} */
 		var state = { flags, items: new Map(), first: null };
-
-		{
-			var parent_node = /** @type {Element} */ (node);
-
-			anchor = parent_node.appendChild(create_text());
-		}
 
 		/** @type {Effect | null} */
 		var fallback = null;
@@ -4765,7 +4863,7 @@ ${properties}`
 			var destroy_length = to_destroy.length;
 
 			if (destroy_length > 0) {
-				var controlled_anchor = length === 0 ? anchor : null;
+				var controlled_anchor = null;
 
 				pause_effects(state, to_destroy, controlled_anchor);
 			}
@@ -4921,137 +5019,114 @@ ${properties}`
 		}
 	}
 
-	/**
-	 * Selects the correct option(s) (depending on whether this is a multiple select)
-	 * @template V
-	 * @param {HTMLSelectElement} select
-	 * @param {V} value
-	 * @param {boolean} mounting
-	 */
-	function select_option(select, value, mounting = false) {
-		if (select.multiple) {
-			// If value is null or undefined, keep the selection as is
-			if (value == undefined) {
-				return;
-			}
-
-			// If not an array, warn and keep the selection as is
-			if (!is_array(value)) {
-				return select_multiple_invalid_value();
-			}
-
-			// Otherwise, update the selection
-			for (var option of select.options) {
-				option.selected = value.includes(get_option_value(option));
-			}
-
-			return;
-		}
-
-		for (option of select.options) {
-			var option_value = get_option_value(option);
-			if (is(option_value, value)) {
-				option.selected = true;
-				return;
-			}
-		}
-
-		if (!mounting || value !== undefined) {
-			select.selectedIndex = -1; // no option should be selected
-		}
-	}
+	/** @import { Batch } from '../../../reactivity/batch.js' */
 
 	/**
-	 * Selects the correct option(s) if `value` is given,
-	 * and then sets up a mutation observer to sync the
-	 * current selection to the dom when it changes. Such
-	 * changes could for example occur when options are
-	 * inside an `#each` block.
-	 * @param {HTMLSelectElement} select
-	 */
-	function init_select(select) {
-		var observer = new MutationObserver(() => {
-			// @ts-ignore
-			select_option(select, select.__value);
-			// Deliberately don't update the potential binding value,
-			// the model should be preserved unless explicitly changed
-		});
-
-		observer.observe(select, {
-			// Listen to option element changes
-			childList: true,
-			subtree: true, // because of <optgroup>
-			// Listen to option element value attribute changes
-			// (doesn't get notified of select value changes,
-			// because that property is not reflected as an attribute)
-			attributes: true,
-			attributeFilter: ['value']
-		});
-
-		teardown(() => {
-			observer.disconnect();
-		});
-	}
-
-	/**
-	 * @param {HTMLSelectElement} select
+	 * @param {HTMLInputElement} input
 	 * @param {() => unknown} get
 	 * @param {(value: unknown) => void} set
 	 * @returns {void}
 	 */
-	function bind_select_value(select, get, set = get) {
-		var mounting = true;
+	function bind_value(input, get, set = get) {
 
-		listen_to_event_and_reset_event(select, 'change', (is_reset) => {
-			var query = is_reset ? '[selected]' : ':checked';
-			/** @type {unknown} */
-			var value;
+		var batches = new WeakSet();
 
-			if (select.multiple) {
-				value = [].map.call(select.querySelectorAll(query), get_option_value);
-			} else {
-				/** @type {HTMLOptionElement | null} */
-				var selected_option =
-					select.querySelector(query) ??
-					// will fall back to first non-disabled option if no option is selected
-					select.querySelector('option:not([disabled])');
-				value = selected_option && get_option_value(selected_option);
+		listen_to_event_and_reset_event(input, 'input', (is_reset) => {
+			if (DEV && input.type === 'checkbox') {
+				// TODO should this happen in prod too?
+				bind_invalid_checkbox_value();
 			}
 
+			/** @type {any} */
+			var value = is_reset ? input.defaultValue : input.value;
+			value = is_numberlike_input(input) ? to_number(value) : value;
 			set(value);
-		});
 
-		// Needs to be an effect, not a render_effect, so that in case of each loops the logic runs after the each block has updated
-		effect(() => {
-			var value = get();
-			select_option(select, value, mounting);
+			if (current_batch !== null) {
+				batches.add(current_batch);
+			}
 
-			// Mounting and value undefined -> take selection from dom
-			if (mounting && value === undefined) {
-				/** @type {HTMLOptionElement | null} */
-				var selected_option = select.querySelector(':checked');
-				if (selected_option !== null) {
-					value = get_option_value(selected_option);
-					set(value);
+			// In runes mode, respect any validation in accessors (doesn't apply in legacy mode,
+			// because we use mutable state which ensures the render effect always runs)
+			if (value !== (value = get())) {
+				var start = input.selectionStart;
+				var end = input.selectionEnd;
+
+				// the value is coerced on assignment
+				input.value = value ?? '';
+
+				// Restore selection
+				if (end !== null) {
+					input.selectionStart = start;
+					input.selectionEnd = Math.min(end, input.value.length);
 				}
 			}
-
-			// @ts-ignore
-			select.__value = value;
-			mounting = false;
 		});
 
-		init_select(select);
+		if (
+			// If we are hydrating and the value has since changed,
+			// then use the updated value from the input instead.
+			// If defaultValue is set, then value == defaultValue
+			// TODO Svelte 6: remove input.value check and set to empty string?
+			(untrack(get) == null && input.value)
+		) {
+			set(is_numberlike_input(input) ? to_number(input.value) : input.value);
+
+			if (current_batch !== null) {
+				batches.add(current_batch);
+			}
+		}
+
+		render_effect(() => {
+			if (DEV && input.type === 'checkbox') {
+				// TODO should this happen in prod too?
+				bind_invalid_checkbox_value();
+			}
+
+			var value = get();
+
+			if (input === document.activeElement && batches.has(/** @type {Batch} */ (current_batch))) {
+				// Never rewrite the contents of a focused input. We can get here if, for example,
+				// an update is deferred because of async work depending on the input:
+				//
+				// <input bind:value={query}>
+				// <p>{await find(query)}</p>
+				return;
+			}
+
+			if (is_numberlike_input(input) && value === to_number(input.value)) {
+				// handles 0 vs 00 case (see https://github.com/sveltejs/svelte/issues/9959)
+				return;
+			}
+
+			if (input.type === 'date' && !value && !input.value) {
+				// Handles the case where a temporarily invalid date is set (while typing, for example with a leading 0 for the day)
+				// and prevents this state from clearing the other parts of the date input (see https://github.com/sveltejs/svelte/issues/7897)
+				return;
+			}
+
+			// don't set the value of the input if it's the same to allow
+			// minlength to work properly
+			if (value !== input.value) {
+				// @ts-expect-error the value is coerced on assignment
+				input.value = value ?? '';
+			}
+		});
 	}
 
-	/** @param {HTMLOptionElement} option */
-	function get_option_value(option) {
-		// __value only exists if the <option> has a value attribute
-		if ('__value' in option) {
-			return option.__value;
-		} else {
-			return option.value;
-		}
+	/**
+	 * @param {HTMLInputElement} input
+	 */
+	function is_numberlike_input(input) {
+		var type = input.type;
+		return type === 'number' || type === 'range';
+	}
+
+	/**
+	 * @param {string} value
+	 */
+	function to_number(value) {
+		return value === '' ? null : +value;
 	}
 
 	/**
@@ -19558,8 +19633,20 @@ ${properties}`
 
 	DeepDiveManager[FILENAME] = 'src/xaiflow/templates/components/DeepDiveManager.svelte';
 
-	var root_1 = add_locations(from_html(`<option> </option>`), DeepDiveManager[FILENAME], [[84, 12]]);
-	var root = add_locations(from_html(`<div><div class="observation-dropdown"><label for="observation-select">Select Observation:</label> <select id="observation-select"></select> <button>Prev</button> <button>Next</button></div> <!></div>`), DeepDiveManager[FILENAME], [[79, 0, [[80, 0, [[81, 4], [82, 4], [87, 4], [88, 4]]]]]]);
+	var root_2 = add_locations(from_html(`<li style="padding:8px;cursor:pointer;"> </li>`), DeepDiveManager[FILENAME], [[114, 16]]);
+	var root_3 = add_locations(from_html(`<li style="padding:8px;color:#888;">No matches</li>`), DeepDiveManager[FILENAME], [[117, 16]]);
+	var root_1 = add_locations(from_html(`<ul class="dropdown-list" style="position:absolute;z-index:10;top:40px;left:0;width:100%;background:white;border:1px solid #ccc;max-height:200px;overflow-y:auto;padding:0;margin:0;list-style:none;"><!> <!></ul>`), DeepDiveManager[FILENAME], [[112, 8]]);
+
+	var root = add_locations(from_html(`<div><div class="observation-dropdown" style="position:relative;max-width:300px;"><label for="observation-filter">Filter Observations:</label> <input id="observation-filter" type="text" placeholder="Type to filter..." autocomplete="off"/> <!> <div style="margin-top:8px;"><button>Prev</button> <button>Next</button></div></div> <!></div>`), DeepDiveManager[FILENAME], [
+		[
+			106,
+			0,
+
+			[
+				[107, 0, [[108, 4], [109, 4], [121, 4, [[122, 8], [123, 8]]]]]
+			]
+		]
+	]);
 
 	function DeepDiveManager($$anchor, $$props) {
 		check_target(new.target);
@@ -19587,10 +19674,12 @@ ${properties}`
 		let currentPage = tag(state(0), 'currentPage');
 		let totalObservations = $$props.shapValues.length;
 		let totalPages = Math.ceil(totalObservations / maxDisplayedValues);
+		let filterText = tag(state(""), 'filterText');
+		let dropdownOpen = tag(state(false), 'dropdownOpen');
 
 		console.log('DeepDiveManager: 1/3 command in file');
 
-		let pagedObservations = tag(
+		tag(
 			user_derived(() => Array.from(
 				{
 					length: Math.min(maxDisplayedValues, totalObservations - get(currentPage) * maxDisplayedValues)
@@ -19618,6 +19707,25 @@ ${properties}`
 			}
 		}
 
+		function handleInputFocus() {
+			set$1(dropdownOpen, true);
+		}
+
+		function handleInputBlur(event) {
+			// Delay closing to allow click selection
+			setTimeout(
+				() => {
+					set$1(dropdownOpen, false);
+				},
+				100
+			);
+		}
+
+		function handleObservationClick(idx) {
+			set$1(selectedObservationIndex, idx, true);
+			set$1(dropdownOpen, false);
+		}
+
 		user_effect(() => {
 			console.log(...log_if_contains_state('log', 'Selected observation index:', get(selectedObservationIndex)));
 			console.log(...log_if_contains_state('log', 'Current page:', get(currentPage)));
@@ -19631,42 +19739,76 @@ ${properties}`
 			console.log(...log_if_contains_state('log', 'Total pages:', totalPages));
 		});
 
+		let allObservations = tag(user_derived(() => Array.from({ length: totalObservations }, (_, idx) => ({ name: `Observation ${idx + 1}`, index: idx }))), 'allObservations');
+		let filteredObservations = tag(user_derived(() => get(allObservations).filter((obs) => obs.name.toLowerCase().includes(get(filterText).toLowerCase()) || obs.index.toString().includes(get(filterText))).slice(0, maxDisplayedValues)), 'filteredObservations');
 		var div = root();
 		var div_1 = child(div);
-		var select = sibling(child(div_1), 2);
+		var input = sibling(child(div_1), 2);
 
-		add_svelte_meta(
-			() => each$1(select, 21, () => get(pagedObservations), index, ($$anchor, obs) => {
-				var option = root_1();
-				var text = child(option, true);
+		var node = sibling(input, 2);
 
-				reset(option);
+		{
+			var consequent_1 = ($$anchor) => {
+				var ul = root_1();
+				var node_1 = child(ul);
 
-				var option_value = {};
+				add_svelte_meta(
+					() => each$1(node_1, 17, () => get(filteredObservations), index, ($$anchor, obs) => {
+						var li = root_2();
+						var text = child(li, true);
 
-				template_effect(() => {
-					set_text(text, get(obs).name);
+						reset(li);
+						template_effect(() => set_text(text, get(obs).name));
+						event('mousedown', li, () => handleObservationClick(get(obs).index));
+						append($$anchor, li);
+					}),
+					'each',
+					DeepDiveManager,
+					113,
+					12
+				);
 
-					if (option_value !== (option_value = get(obs).index)) {
-						option.value = (option.__value = get(obs).index) ?? '';
-					}
-				});
+				var node_2 = sibling(node_1, 2);
 
-				append($$anchor, option);
-			}),
-			'each',
-			DeepDiveManager,
-			83,
-			8
-		);
+				{
+					var consequent = ($$anchor) => {
+						var li_1 = root_3();
 
-		var button = sibling(select, 2);
+						append($$anchor, li_1);
+					};
+
+					add_svelte_meta(
+						() => if_block(node_2, ($$render) => {
+							if (strict_equals(get(filteredObservations).length, 0)) $$render(consequent);
+						}),
+						'if',
+						DeepDiveManager,
+						116,
+						12
+					);
+				}
+				append($$anchor, ul);
+			};
+
+			add_svelte_meta(
+				() => if_block(node, ($$render) => {
+					if (get(dropdownOpen)) $$render(consequent_1);
+				}),
+				'if',
+				DeepDiveManager,
+				111,
+				4
+			);
+		}
+
+		var div_2 = sibling(node, 2);
+		var button = child(div_2);
 		var button_1 = sibling(button, 2);
 
-		var node = sibling(div_1, 2);
+		var node_3 = sibling(div_1, 2);
 
 		add_svelte_meta(
-			() => DeepDiveChart(node, {
+			() => DeepDiveChart(node_3, {
 				get shapValues() {
 					return $$props.shapValues;
 				},
@@ -19705,7 +19847,7 @@ ${properties}`
 			}),
 			'component',
 			DeepDiveManager,
-			90,
+			126,
 			0,
 			{ componentTag: 'DeepDiveChart' }
 		);
@@ -19715,7 +19857,9 @@ ${properties}`
 			button_1.disabled = strict_equals(get(currentPage), totalPages - 1);
 		});
 
-		bind_select_value(select, () => get(selectedObservationIndex), ($$value) => set$1(selectedObservationIndex, $$value));
+		bind_value(input, () => get(filterText), ($$value) => set$1(filterText, $$value));
+		event('focus', input, handleInputFocus);
+		event('blur', input, handleInputBlur);
 		event('click', button, prevPage);
 		event('click', button_1, nextPage);
 		append($$anchor, div);

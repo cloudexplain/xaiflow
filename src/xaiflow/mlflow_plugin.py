@@ -302,7 +302,6 @@ class XaiflowPlugin:
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(html_content)
 
-        import pdb; pdb.set_trace()
         with open('test_report.html', 'w', encoding='utf-8') as f:
             f.write(html_content)
     
