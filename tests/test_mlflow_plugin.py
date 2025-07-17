@@ -1,14 +1,17 @@
 import pytest
 from pathlib import Path
-from xaiflow.report_generator import ReportGenerator
 from xaiflow.mlflow_plugin import XaiflowPlugin
 import numpy as np
 from sklearn.datasets import fetch_openml
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+from xgboost import XGBClassifier
+from catboost import CatBoostClassifier
 from sklearn.preprocessing import LabelEncoder
 import shap
+from typing import Callable
 
 from playwright.sync_api import sync_playwright
+
 
 def store_report(html_content, filename="test_report.html"):
     """Helper function to store HTML content to a file."""
@@ -19,6 +22,30 @@ def store_report(html_content, filename="test_report.html"):
         f.write(html_content)
     return html_path
 
+def save_and_click_canvas_wrapper(func: Callable) -> Callable:
+    def wrapper(*args, **kwargs):
+        html_content = func(*args, **kwargs)
+        html_path = store_report(html_content, func.__name__ + ".html")
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            context = browser.new_context(record_video_dir="tests/outputs/videos/")
+            page = context.new_page()
+            page.goto(f"file://{html_path.resolve()}")
+            page.wait_for_selector(".importance-chart-container canvas")
+            canvas = page.query_selector(".importance-chart-container canvas")
+            assert canvas is not None, "Canvas not found in importance chart container"
+            assert canvas.is_visible(), "Canvas is not visible"
+            box = canvas.bounding_box()
+            x = box["x"] + box["width"] / 2
+            y = box["y"] + box["height"] / 2
+            page.mouse.click(x, y)
+            page.wait_for_timeout(1000)
+            # Check if canvas is not empty
+            is_empty = canvas.evaluate("(node) => {\n  const ctx = node.getContext('2d');\n  const data = ctx.getImageData(0, 0, node.width, node.height).data;\n  const totalPixels = data.length / 4;\n  if (totalPixels === 0) return true;\n  // Get first pixel color\n  const r0 = data[0], g0 = data[1], b0 = data[2], a0 = data[3];\n  let sameCount = 0;\n  for (let i = 0; i < data.length; i += 4) {\n    const r = data[i], g = data[i+1], b = data[i+2], a = data[i+3];\n    if (r === r0 && g === g0 && b === b0 && a === a0) {\n      sameCount++;\n    }\n  }\n  return (sameCount / totalPixels) >= 0.9;\n}")
+            assert not is_empty, "Canvas is empty or nearly empty: 99% of pixels have the same color"
+    return wrapper
+
+@save_and_click_canvas_wrapper
 def test_categorical_feature_encodings():
     data = fetch_openml(data_id=196, as_frame=True)
     X = data.data.copy()[:100]
@@ -59,25 +86,10 @@ def test_categorical_feature_encodings():
         feature_encodings=feature_encodings,
         feature_names=list(X.columns),
     )
-    html_path = store_report(html_content, "test_categorical_feature_encodings.html")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        context = browser.new_context(record_video_dir="tests/outputs/videos/")
-        page = context.new_page()
-        page.goto(f"file://{html_path.resolve()}")
-        page.wait_for_selector(".importance-chart-container canvas")
-        canvas = page.query_selector(".importance-chart-container canvas")
-        assert canvas is not None, "Canvas not found in importance chart container"
-        assert canvas.is_visible(), "Canvas is not visible"
-        box = canvas.bounding_box()
-        x = box["x"] + box["width"] / 2
-        y = box["y"] + box["height"] / 2
-        page.mouse.click(x, y)
-        page.wait_for_timeout(1000)  # Wait to ensure video is recorded
-        context.close()  # This will save the video file
-        browser.close()
+    return html_content
 
 
+@save_and_click_canvas_wrapper
 def test_no_feature_encodings():
     plugin = XaiflowPlugin()
     html_content = plugin._generate_html_content(
@@ -87,24 +99,9 @@ def test_no_feature_encodings():
         feature_encodings=None,
         feature_names=['Feature 1', 'Feature 2', 'Feature 3'],
     )
-    html_path = store_report(html_content, "test_no_feature_encodings.html")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        context = browser.new_context(record_video_dir="tests/outputs/videos/")
-        page = context.new_page()
-        page.goto(f"file://{html_path.resolve()}")
-        page.wait_for_selector(".importance-chart-container canvas")
-        canvas = page.query_selector(".importance-chart-container canvas")
-        assert canvas is not None, "Canvas not found in importance chart container"
-        assert canvas.is_visible(), "Canvas is not visible"
-        box = canvas.bounding_box()
-        x = box["x"] + box["width"] / 2
-        y = box["y"] + box["height"] / 2
-        page.mouse.click(x, y)
-        page.wait_for_timeout(1000)  # Wait to ensure video is recorded
-        context.close()  # This will save the video file
-        browser.close()
+    return html_content
 
+@save_and_click_canvas_wrapper
 def test_fix_previous_bug():
     importanceData = {'features':
                       ['acv_score_canc_30d',
@@ -155,25 +152,43 @@ def test_fix_previous_bug():
         feature_encodings=featureEncodings,
         feature_names=featureNames,
     )
-    html_path = store_report(html_content, "test_fix_previous_bug.html")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        context = browser.new_context(record_video_dir="tests/outputs/videos/")
-        page = context.new_page()
-        page.goto(f"file://{html_path.resolve()}")
-        page.wait_for_selector(".importance-chart-container canvas")
-        canvas = page.query_selector(".importance-chart-container canvas")
-        assert canvas is not None, "Canvas not found in importance chart container"
-        assert canvas.is_visible(), "Canvas is not visible"
-        box = canvas.bounding_box()
-        x = box["x"] + box["width"] / 2
-        y = box["y"] + box["height"] / 2
-        page.mouse.click(x, y)
-        page.wait_for_timeout(1000)  # Wait to ensure video is recorded
-        context.close()  # This will save the video file
-        browser.close()
+    return html_content
 
-# def test_importance_chart_canvas_click():
-#     html_path = Path("tests/outputs/test_no_feature_encodings.html")
-#     assert html_path.exists(), "Report HTML file does not exist. Run test_no_feature_encodings first."
 
+@save_and_click_canvas_wrapper
+def test_classification_case():
+    X, y = shap.datasets.adult(n_points=200)
+
+    # Identify categorical columns
+    categorical_cols = [col for col in X.columns if X[col].dtype == 'category' or X[col].dtype == 'object']
+    numeric_cols = [col for col in X.columns if col not in categorical_cols]
+
+    label_encoders = {}
+
+    # Fill missing values manually
+    for col in numeric_cols:
+        X[col] = X[col].astype(float).fillna(X[col].mean())
+    for col in categorical_cols:
+        le = LabelEncoder()
+        X[col + '_encoded'] = le.fit_transform(X[col].astype(str))  # convert to string in case of NaNs
+        label_encoders[col] = le  # Save encoder if needed later
+
+    # Train model
+    rfc = RandomForestClassifier()
+    rfc.fit(X, y)
+    ex = shap.TreeExplainer(rfc)
+    shap_values = ex(X)
+    plugin = XaiflowPlugin()
+
+    feature_encodings = {}
+    for col in categorical_cols:
+        feature_encodings[col + '_encoded'] = dict(zip(range(len(label_encoders[col].classes_)), label_encoders[col].classes_))
+    html_content = plugin._generate_html_content(
+        importance_data={'features': list(X.columns), 'values': np.abs(shap_values.values).mean(axis=0).tolist()},
+        shap_values=shap_values.values,
+        feature_values=shap_values.data,
+        base_values=shap_values.base_values[0],
+        feature_encodings=feature_encodings,
+        feature_names=list(X.columns),
+    )
+    return html_content
