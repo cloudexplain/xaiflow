@@ -25,7 +25,7 @@ xaiflow solves this by providing a simple integration with MLflow that automatic
 
 ```python
 import mlflow
-from xaiflow import CEMLflowPlugin
+from xaiflow import XaiflowPlugin
 
 # Your existing MLflow training code
 with mlflow.start_run():
@@ -37,7 +37,7 @@ with mlflow.start_run():
     shap_values = explainer(X)
     
     # Add interactive explainable AI reports
-    plugin = CEMLflowPlugin()
+    plugin = XaiflowPlugin()
     plugin.log_feature_importance_report(
         feature_names=X.columns.tolist(),
         shap_values=shap_values,
@@ -46,6 +46,8 @@ with mlflow.start_run():
 ```
 
 That's it. Your MLflow experiment now includes an interactive HTML report that stakeholders can explore directly in their browser.
+
+Or take a look at the [examples](examples).
 
 ## Project Structure
 

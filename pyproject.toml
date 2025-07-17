@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xaiflow"
-version = "0.1.0rc2"
+version = "0.1.0rc3"
 description = "MLflow integration library for generating interactive HTML reports with SHAP analysis using Svelte and Chart.js"
 authors = [
     {name = "CloudExplain Team", email = "tobias@cloudexplain.eu"}
