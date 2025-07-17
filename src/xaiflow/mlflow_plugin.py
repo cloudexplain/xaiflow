@@ -11,8 +11,8 @@ import mlflow
 from mlflow.tracking import MlflowClient
 from typing import Dict, List, Optional, Any
 import numpy as np
-from .report_generator import ReportGenerator
 from shap import Explanation
+from jinja2 import Environment, FileSystemLoader
 
 
 class XaiflowPlugin:
@@ -21,13 +21,14 @@ class XaiflowPlugin:
     """
     
     def __init__(self):
-        self.report_generator = ReportGenerator()
         self.client = MlflowClient()
-    
+        self.template_dir = os.path.join(os.path.dirname(__file__), 'templates')
+        self.env = Environment(loader=FileSystemLoader(self.template_dir))
+
     def log_feature_importance_report(
         self,
         feature_names: List[str],
-        shap_values: List[List[float]] | np.ndarray | Explanation,
+        shap_values: Explanation,
         feature_encodings: Optional[Dict[str, Dict[int, str]]] = None,
         importance_values: List[float] | np.ndarray = None,
         run_id: Optional[str] = None,
@@ -82,8 +83,7 @@ class XaiflowPlugin:
         
         try:
             # Generate the HTML report with inlined bundle.js
-            self._generate_html_content(
-                output_path=temp_path,
+            html_content = self._generate_html_content(
                 importance_data=importance_data,
                 shap_values=shap_values,
                 feature_values=feature_values,
@@ -91,6 +91,12 @@ class XaiflowPlugin:
                 feature_encodings=feature_encodings,
                 feature_names=feature_names,
             )
+
+            with open(temp_path, 'w', encoding='utf-8') as f:
+                f.write(html_content)
+
+            with open('test_report.html', 'w', encoding='utf-8') as f:
+                f.write(html_content)
             
             # Log the report as an MLflow artifact
             artifact_full_path = f"{artifact_path}/{report_name}"
@@ -213,7 +219,6 @@ class XaiflowPlugin:
     
     def _generate_html_content(
         self,
-        output_path: str,
         importance_data: Dict[str, Any],
         shap_values: List[List[float]],
         feature_values: List[float] = None,
@@ -231,7 +236,7 @@ class XaiflowPlugin:
         """
         
         # Load the template
-        template = self.report_generator.env.get_template('report.html')
+        template = self.env.get_template('report.html')
         
         # Read the bundle.js content to inline it
         bundle_js_content = ""
@@ -270,21 +275,6 @@ class XaiflowPlugin:
             elif hasattr(base_values, 'tolist'):
                 base_values = base_values.tolist()
         
-        # Save all data to be used in the report
-        # with open('test_report_data.json', 'w', encoding='utf-8') as f:
-        #     data_to_save = {
-        #         "random_number": random_number,
-        #         "timestamp": current_time,
-        #         "importance_data": importance_data,  # Already Python dict
-        #         "shap_values": shap_values,  # Now Python list
-        #         "feature_values": feature_values,  # Now Python list or None
-        #         "base_values": base_values,  # Now Python list or None
-        #         "feature_encodings": feature_encodings,  # Optional encodings
-        #         "feature_names": feature_names,  # List of feature names
-        #     }
-        #     json.dump(data_to_save, f, indent=2)
-        #     print(f"Saved report data to test_report_data.json")
-        
         # Render the template with data (no json.dumps needed since Jinja2 handles it)
         html_content = template.render(
             random_number=random_number,
@@ -292,18 +282,14 @@ class XaiflowPlugin:
             importance_data=importance_data,  # Pass as Python dict
             shap_values=shap_values,  # Pass as Python list
             feature_values=feature_values,  # Pass as Python list or None
-            base_values=base_values,  # Pass as Python list or None
-            feature_encodings=feature_encodings,  # Pass as optional dict
+            base_values=base_values or [0] * 10,  # Todo: fix this once we hand over numpy arrays
+            feature_encodings=feature_encodings or {},  # Pass as optional dict
             feature_names=feature_names,  # Pass as list
             bundle_js_content=bundle_js_content  # Pass the bundle content
         )
         
+        return html_content
         # Write to file
-        with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(html_content)
-
-        with open('test_report.html', 'w', encoding='utf-8') as f:
-            f.write(html_content)
     
     def get_report_url(self, run_id: str, artifact_path: str = "reports", report_name: str = "feature_importance_report.html") -> str:
         """

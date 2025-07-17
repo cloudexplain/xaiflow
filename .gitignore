@@ -10,3 +10,5 @@ src/xaiflow/templates/assets/bundle.js.map
 *.html
 !src/xaiflow/templates/report.html
 mlruns
+tests/outputs/*
+!tests/outputs/.gitkeep
