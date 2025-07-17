@@ -1,10 +1,10 @@
 // Development entry point for testing Svelte components
 import { mount } from 'svelte';
-import ChartManager from '../src/ce_mlflow_extension/templates/components/ChartManager.svelte';
-import ImportanceChart2 from '../src/ce_mlflow_extension/templates/components/ImportanceChart2.svelte';
-import ScatterShapValues from '../src/ce_mlflow_extension/templates/components/ScatterShapValues.svelte';
-import DeepDiveManager from '../src/ce_mlflow_extension/templates/components/DeepDiveManager.svelte';
-import DeepDiveChart from '../src/ce_mlflow_extension/templates/components/DeepDiveChart.svelte';
+import ChartManager from '../src/xaiflow/templates/components/ChartManager.svelte';
+import ImportanceChart2 from '../src/xaiflow/templates/components/ImportanceChart2.svelte';
+import ScatterShapValues from '../src/xaiflow/templates/components/ScatterShapValues.svelte';
+import DeepDiveManager from '../src/xaiflow/templates/components/DeepDiveManager.svelte';
+import DeepDiveChart from '../src/xaiflow/templates/components/DeepDiveChart.svelte';
 
 // Export components immediately
 window.DevComponents = {

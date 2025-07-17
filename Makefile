@@ -62,8 +62,8 @@ test-shap: build
 .PHONY: clean
 clean:
 	@echo "Cleaning generated files..."
-	rm -f src/ce_mlflow_extension/templates/assets/bundle.js
-	rm -f src/ce_mlflow_extension/templates/assets/bundle.js.map
+	rm -f src/xaiflow/templates/assets/bundle.js
+	rm -f src/xaiflow/templates/assets/bundle.js.map
 	rm -f *.html
 	rm -rf node_modules/.cache
 	@echo "✅ Cleaned!"
@@ -77,9 +77,9 @@ all: install build test
 # Check if bundle.js exists
 .PHONY: check-bundle
 check-bundle:
-	@if [ -f "src/ce_mlflow_extension/templates/assets/bundle.js" ]; then \
+	@if [ -f "src/xaiflow/templates/assets/bundle.js" ]; then \
 		echo "✅ bundle.js exists"; \
-		ls -la src/ce_mlflow_extension/templates/assets/bundle.js; \
+		ls -la src/xaiflow/templates/assets/bundle.js; \
 	else \
 		echo "❌ bundle.js not found. Run 'make build' first."; \
 		exit 1; \
@@ -94,4 +94,4 @@ status:
 	@echo "Python virtual environment:"
 	@if [ -d ".venv" ]; then echo "✅ Found"; else echo "❌ Not found"; fi
 	@echo "Svelte bundle:"
-	@if [ -f "src/ce_mlflow_extension/templates/assets/bundle.js" ]; then echo "✅ Built"; else echo "❌ Not built (run 'make build')"; fi
+	@if [ -f "src/xaiflow/templates/assets/bundle.js" ]; then echo "✅ Built"; else echo "❌ Not built (run 'make build')"; fi

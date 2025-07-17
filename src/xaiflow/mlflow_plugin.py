@@ -301,6 +301,10 @@ class XaiflowPlugin:
         # Write to file
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(html_content)
+
+        import pdb; pdb.set_trace()
+        with open('test_report.html', 'w', encoding='utf-8') as f:
+            f.write(html_content)
     
     def get_report_url(self, run_id: str, artifact_path: str = "reports", report_name: str = "feature_importance_report.html") -> str:
         """
@@ -342,7 +346,7 @@ def log_feature_importance(
     """
     Convenience function to log feature importance report to MLflow
     """
-    plugin = CEMLflowPlugin()
+    plugin = XaiflowPlugin()
     return plugin.log_feature_importance_report(
         feature_names=feature_names,
         importance_values=importance_values,
@@ -361,7 +365,7 @@ def log_model_explanation(
     """
     Convenience function to log model explanation report to MLflow
     """
-    plugin = CEMLflowPlugin()
+    plugin = XaiflowPlugin()
     return plugin.log_model_explanation_report(
         model=model,
         X_test=X_test,

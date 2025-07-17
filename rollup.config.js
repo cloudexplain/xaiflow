@@ -7,12 +7,12 @@ import typescript from '@rollup/plugin-typescript';
 const production = !process.env.ROLLUP_WATCH;
 
 export default {
-  input: 'src/ce_mlflow_extension/templates/main.js',
+  input: 'src/xaiflow/templates/main.js',
   output: {
     sourcemap: true,
     format: 'iife',
     name: 'app',
-    file: 'src/ce_mlflow_extension/templates/assets/bundle.js'
+    file: 'src/xaiflow/templates/assets/bundle.js'
   },
   plugins: [
     svelte({

@@ -17065,7 +17065,7 @@ ${properties}`
 	    }
 	}
 
-	ImportanceChart2[FILENAME] = 'src/ce_mlflow_extension/templates/components/ImportanceChart2.svelte';
+	ImportanceChart2[FILENAME] = 'src/xaiflow/templates/components/ImportanceChart2.svelte';
 
 	var root$4 = add_locations(from_html(`<div class="importance-chart-container"><canvas class="svelte-ec5xpb"></canvas></div>`), ImportanceChart2[FILENAME], [[236, 0, [[237, 2]]]]);
 
@@ -17333,7 +17333,7 @@ ${properties}`
 		return pop({ ...legacy_api() });
 	}
 
-	ScatterShapValues[FILENAME] = 'src/ce_mlflow_extension/templates/components/ScatterShapValues.svelte';
+	ScatterShapValues[FILENAME] = 'src/xaiflow/templates/components/ScatterShapValues.svelte';
 
 	var root$3 = add_locations(from_html(`<div class="scatter-shap-container"><canvas class="svelte-ec5xpb"></canvas></div>`), ScatterShapValues[FILENAME], [[237, 0, [[238, 2]]]]);
 
@@ -17581,7 +17581,7 @@ ${properties}`
 		return pop({ ...legacy_api() });
 	}
 
-	ChartManager[FILENAME] = 'src/ce_mlflow_extension/templates/components/ChartManager.svelte';
+	ChartManager[FILENAME] = 'src/xaiflow/templates/components/ChartManager.svelte';
 
 	var root$2 = add_locations(from_html(`<div class="chart-manager svelte-169j5gc"><div class="charts-row svelte-169j5gc"><div class="chart-section svelte-169j5gc"><h3 class="svelte-169j5gc">Feature Importance Chart</h3> <div class="chart-container svelte-169j5gc"><!></div></div> <div class="chart-section svelte-169j5gc"><h3 class="svelte-169j5gc">SHAP Values</h3> <div class="chart-container svelte-169j5gc"><!></div></div></div></div>`), ChartManager[FILENAME], [
 		[
@@ -19112,9 +19112,9 @@ ${properties}`
 	    });
 	}
 
-	DeepDiveChart[FILENAME] = 'src/ce_mlflow_extension/templates/components/DeepDiveChart.svelte';
+	DeepDiveChart[FILENAME] = 'src/xaiflow/templates/components/DeepDiveChart.svelte';
 
-	var root$1 = add_locations(from_html(`<canvas class="svelte-1mf6xd3"></canvas>`), DeepDiveChart[FILENAME], [[427, 2]]);
+	var root$1 = add_locations(from_html(`<canvas class="svelte-1mf6xd3"></canvas>`), DeepDiveChart[FILENAME], [[404, 2]]);
 
 	function DeepDiveChart($$anchor, $$props) {
 		check_target(new.target);
@@ -19173,10 +19173,25 @@ ${properties}`
 		let cumulativeValues;
 		let maxCumulativeValue;
 
+		function getScreenSizeFlags() {
+			const width = window.innerWidth;
+
+			return {
+				isSmallScreen: width < 768,
+				isMediumScreen: width >= 768 && width < 1560,
+				isLargeScreen: width >= 1560,
+				isXLargeScreen: width >= 1980
+			};
+		}
+
 		function updateChart(singleShapValues) {
 			console.log(...log_if_contains_state('log', "updateChart called with singleShapValues:", singleShapValues, "and singleFeatureValues:", get(singleFeatureValues)));
 			maxOfData = Math.max(...singleShapValues);
 			minOfData = Math.min(...singleShapValues);
+
+			const screen = getScreenSizeFlags();
+
+			console.log(...log_if_contains_state('log', "Screen size flags:", screen));
 
 			// Color mapping based on isHigherOutputBetter prop
 			pointBackgroundColor = singleShapValues.map((d) => {
@@ -19200,54 +19215,45 @@ ${properties}`
 				chart.data.datasets[0].data = cumulativeValues;
 				maxCumulativeValue = Math.max(...cumulativeValues.map((d) => d[1]));
 				console.log(...log_if_contains_state('log', "Max Cumulative Value", maxCumulativeValue));
-
-				// chart.data.datasets[0].data[0][0] += base_value;
 				chart.data.datasets[0].backgroundColor = pointBackgroundColor;
 
 				// Update x-axis rotation based on screen size
 				if (chart.options.scales?.x?.ticks) {
-					const isLargeScreen = window.innerWidth >= 1720;
-					const isMediumScreen = window.innerWidth < 1024;
+					chart.options.scales.x.ticks.maxRotation = screen.isLargeScreen ? 45 : 90;
+					chart.options.scales.x.ticks.minRotation = screen.isLargeScreen ? 0 : 90;
 
-					chart.options.scales.x.ticks.maxRotation = isLargeScreen ? 45 : 90;
-					chart.options.scales.x.ticks.minRotation = isLargeScreen ? 0 : 90;
-					chart.options.scales.x.ticks.font = { size: window.innerWidth < 768 ? 8 : isMediumScreen ? 10 : 12 };
+					chart.options.scales.x.ticks.font = {
+						size: screen.isSmallScreen ? 8 : screen.isMediumScreen ? 10 : 12
+					};
 				}
 
 				// Update y-axis font size
 				if (chart.options.scales?.y?.ticks) {
-					const isSmallScreen = window.innerWidth < 768;
-					const isMediumScreen = window.innerWidth < 1024;
-
-					chart.options.scales.y.ticks.font = { size: isSmallScreen ? 8 : isMediumScreen ? 10 : 12 };
+					chart.options.scales.y.ticks.font = {
+						size: screen.isSmallScreen ? 8 : screen.isMediumScreen ? 10 : 12
+					};
 				}
 
 				// Update layout padding
 				if (chart.options.layout?.padding) {
-					const isSmallScreen = window.innerWidth < 768;
-
 					chart.options.layout.padding = {
-						top: isSmallScreen ? 40 : 60,
-						bottom: isSmallScreen ? 5 : 10,
-						left: isSmallScreen ? 5 : 10,
-						right: isSmallScreen ? 5 : 10
+						top: screen.isSmallScreen ? 40 : 60,
+						bottom: screen.isSmallScreen ? 5 : 10,
+						left: screen.isSmallScreen ? 5 : 10,
+						right: screen.isSmallScreen ? 5 : 10
 					};
 				}
 
 				// Update datalabels font size and offset
 				if (chart.options.plugins?.datalabels) {
-					const isLargeScreen = window.innerWidth >= 1560;
-					const isSmallScreen = window.innerWidth < 768;
-					const isMediumScreen = window.innerWidth < 1024;
-
-					chart.options.plugins.datalabels.display = isLargeScreen; // Only show on large screens
+					chart.options.plugins.datalabels.display = screen.isLargeScreen || screen.isMediumScreen;
 
 					chart.options.plugins.datalabels.font = {
 						weight: 'bold',
-						size: isSmallScreen ? 8 : isMediumScreen ? 9 : 10
+						size: screen.isSmallScreen ? 8 : screen.isMediumScreen ? 9 : 10
 					};
 
-					chart.options.plugins.datalabels.offset = isSmallScreen ? 2 : 5;
+					chart.options.plugins.datalabels.offset = screen.isSmallScreen ? 2 : 5;
 				}
 
 				chart.update();
@@ -19268,42 +19274,45 @@ ${properties}`
 
 		// Handle screen resize for responsive label rotation
 		function handleResize() {
+			const screen = getScreenSizeFlags();
+
+			console.log(...log_if_contains_state('log', "Handling resize, current screen size flags:", screen));
+
 			if (chart && chart.options.scales?.x?.ticks) {
-				const isLargeScreen = window.innerWidth >= 1560;
-				const isSmallScreen = window.innerWidth < 768;
-				const isMediumScreen = window.innerWidth < 1024;
+				chart.options.scales.x.ticks.maxRotation = screen.isLargeScreen ? 45 : 90;
+				chart.options.scales.x.ticks.minRotation = screen.isLargeScreen ? 0 : 90;
 
-				// Update x-axis
-				chart.options.scales.x.ticks.maxRotation = isLargeScreen ? 45 : 90;
-
-				chart.options.scales.x.ticks.minRotation = isLargeScreen ? 0 : 90;
-				chart.options.scales.x.ticks.font = { size: isSmallScreen ? 8 : isMediumScreen ? 10 : 12 };
+				chart.options.scales.x.ticks.font = {
+					size: screen.isSmallScreen ? 8 : screen.isMediumScreen ? 10 : 12
+				};
 
 				// Update y-axis
 				if (chart.options.scales?.y?.ticks) {
-					chart.options.scales.y.ticks.font = { size: isSmallScreen ? 8 : isMediumScreen ? 10 : 12 };
+					chart.options.scales.y.ticks.font = {
+						size: screen.isSmallScreen ? 8 : screen.isMediumScreen ? 10 : 12
+					};
 				}
 
 				// Update layout padding
 				if (chart.options.layout?.padding) {
 					chart.options.layout.padding = {
-						top: isSmallScreen ? 40 : 60,
-						bottom: isSmallScreen ? 5 : 10,
-						left: isSmallScreen ? 5 : 10,
-						right: isSmallScreen ? 5 : 10
+						top: screen.isSmallScreen ? 40 : 60,
+						bottom: screen.isSmallScreen ? 5 : 10,
+						left: screen.isSmallScreen ? 5 : 10,
+						right: screen.isSmallScreen ? 5 : 10
 					};
 				}
 
 				// Update datalabels
 				if (chart.options.plugins?.datalabels) {
-					chart.options.plugins.datalabels.display = isLargeScreen; // Only show on large screens
+					chart.options.plugins.datalabels.display = screen.isLargeScreen || screen.isMediumScreen;
 
 					chart.options.plugins.datalabels.font = {
 						weight: 'bold',
-						size: isSmallScreen ? 8 : isMediumScreen ? 9 : 10
+						size: screen.isSmallScreen ? 8 : screen.isMediumScreen ? 9 : 10
 					};
 
-					chart.options.plugins.datalabels.offset = isSmallScreen ? 2 : 5;
+					chart.options.plugins.datalabels.offset = screen.isSmallScreen ? 2 : 5;
 				}
 
 				chart.update('none'); // Update without animation for smoother resize
@@ -19311,15 +19320,6 @@ ${properties}`
 		}
 
 		onMount(() => {
-			// sort feature names by featureOrder
-			// let sortedFeatureNames = explanationSummary.sort((a, b) => b.importance - a.importance).map((d) => d.feature_name);
-			// let sortedFeatures = modelFeatures.sort((a, b) => sortedFeatureNames.indexOf(a.feature_name) - sortedFeatureNames.indexOf(b.feature_name));
-			// let sortedIdx = modelFeatures.sort((a, b) => sortedFeatureNames.indexOf(a.feature_name) - sortedFeatureNames.indexOf(b.feature_name)).map((d) => d.feature_order);
-			//  const sortedFeatures = modelFeatures.sort((a, b) => a.feature_order - b.feature_order
-			//                                          );
-			//  
-			console.log("DeepDiveChart: onMount called");
-
 			maxOfData = Math.max(...get(singleShapValues));
 			minOfData = Math.min(...get(singleShapValues));
 
@@ -19346,7 +19346,7 @@ ${properties}`
 				]
 			};
 
-			console.log(...log_if_contains_state('log', "IN DEEPDIVE data", data, $$props.featureNames));
+			const screen = getScreenSizeFlags();
 
 			const config = {
 				type: 'bar',
@@ -19409,7 +19409,7 @@ ${properties}`
 						},
 
 						datalabels: {
-							display: window.innerWidth >= 1980, // Only show on large screens
+							display: screen.isLargeScreen || screen.isMediumScreen, // Show on large and medium screens
 							clamp: true,
 							anchor: 'end',
 							align: 'top',
@@ -19417,17 +19417,15 @@ ${properties}`
 
 							font: {
 								weight: 'bold',
-								size: window.innerWidth < 768 ? 8 : window.innerWidth < 1024 ? 9 : 10
+								size: screen.isSmallScreen ? 8 : screen.isMediumScreen ? 9 : 10
 							},
 
-							offset: window.innerWidth < 768 ? 2 : 5,
+							offset: screen.isSmallScreen ? 2 : 5,
 
 							formatter(value, context) {
 								const index = context.dataIndex;
 
 								// const description = featureDescriptions[index]; // Description not needed for datalabel
-								console.log(...log_if_contains_state('log', "IN DEEPDIVE featureEncodings", featureEncodings(), featureEncodings()[$$props.featureNames[index]]));
-
 								let featureValue;
 
 								if (featureEncodings() && featureEncodings()[$$props.featureNames[index]]) {
@@ -19493,7 +19491,7 @@ ${properties}`
 								const featureLines = breakTextIntoLines(featureValueStr, 10);
 
 								// Limit number of lines on small screens
-								const maxLines = window.innerWidth < 768 ? 2 : 3;
+								const maxLines = screen.isSmallScreen ? 2 : 3;
 
 								const displayLines = featureLines.slice(0, maxLines);
 
@@ -19558,7 +19556,7 @@ ${properties}`
 		return pop({ ...legacy_api() });
 	}
 
-	DeepDiveManager[FILENAME] = 'src/ce_mlflow_extension/templates/components/DeepDiveManager.svelte';
+	DeepDiveManager[FILENAME] = 'src/xaiflow/templates/components/DeepDiveManager.svelte';
 
 	var root_1 = add_locations(from_html(`<option> </option>`), DeepDiveManager[FILENAME], [[84, 12]]);
 	var root = add_locations(from_html(`<div><div class="observation-dropdown"><label for="observation-select">Select Observation:</label> <select id="observation-select"></select> <button>Prev</button> <button>Next</button></div> <!></div>`), DeepDiveManager[FILENAME], [[79, 0, [[80, 0, [[81, 4], [82, 4], [87, 4], [88, 4]]]]]]);

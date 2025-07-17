@@ -1,2 +1,2 @@
-ce_mlflow_extension
+xaiflow
 xaiflow

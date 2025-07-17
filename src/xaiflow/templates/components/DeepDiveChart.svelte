@@ -74,10 +74,22 @@
     let cumulativeValues: number;
     let maxCumulativeValue: number;
   
+    function getScreenSizeFlags() {
+      const width = window.innerWidth;
+      return {
+        isSmallScreen: width < 768,
+        isMediumScreen: width >= 768 && width < 1560,
+        isLargeScreen: width >= 1560,
+        isXLargeScreen: width >= 1980
+      };
+    }
+  
     function updateChart(singleShapValues: number[]) {
       console.log("updateChart called with singleShapValues:", singleShapValues, "and singleFeatureValues:", singleFeatureValues);
       maxOfData = Math.max(...singleShapValues);
       minOfData = Math.min(...singleShapValues);
+      const screen = getScreenSizeFlags();
+      console.log("Screen size flags:", screen);
       
       // Color mapping based on isHigherOutputBetter prop
       pointBackgroundColor = singleShapValues.map(d => {
@@ -100,56 +112,39 @@
         chart.data.datasets[0].data = cumulativeValues;
         maxCumulativeValue = Math.max(...cumulativeValues.map(d => d[1]));
         console.log("Max Cumulative Value", maxCumulativeValue);
-        // chart.data.datasets[0].data[0][0] += base_value;
         chart.data.datasets[0].backgroundColor = pointBackgroundColor;
-        
         // Update x-axis rotation based on screen size
         if (chart.options.scales?.x?.ticks) {
-          const isLargeScreen = window.innerWidth >= 1720;
-          const isMediumScreen = window.innerWidth < 1024;
-          
-          chart.options.scales.x.ticks.maxRotation = isLargeScreen ? 45 : 90;
-          chart.options.scales.x.ticks.minRotation = isLargeScreen ? 0 : 90;
+          chart.options.scales.x.ticks.maxRotation = screen.isLargeScreen ? 45 : 90;
+          chart.options.scales.x.ticks.minRotation = screen.isLargeScreen ? 0 : 90;
           chart.options.scales.x.ticks.font = {
-            size: window.innerWidth < 768 ? 8 : isMediumScreen ? 10 : 12
+            size: screen.isSmallScreen ? 8 : screen.isMediumScreen ? 10 : 12
           };
         }
-        
         // Update y-axis font size
         if (chart.options.scales?.y?.ticks) {
-          const isSmallScreen = window.innerWidth < 768;
-          const isMediumScreen = window.innerWidth < 1024;
-          
           chart.options.scales.y.ticks.font = {
-            size: isSmallScreen ? 8 : isMediumScreen ? 10 : 12
+            size: screen.isSmallScreen ? 8 : screen.isMediumScreen ? 10 : 12
           };
         }
-        
         // Update layout padding
         if (chart.options.layout?.padding) {
-          const isSmallScreen = window.innerWidth < 768;
           chart.options.layout.padding = {
-            top: isSmallScreen ? 40 : 60,
-            bottom: isSmallScreen ? 5 : 10,
-            left: isSmallScreen ? 5 : 10,
-            right: isSmallScreen ? 5 : 10
+            top: screen.isSmallScreen ? 40 : 60,
+            bottom: screen.isSmallScreen ? 5 : 10,
+            left: screen.isSmallScreen ? 5 : 10,
+            right: screen.isSmallScreen ? 5 : 10
           };
         }
-        
         // Update datalabels font size and offset
         if (chart.options.plugins?.datalabels) {
-          const isLargeScreen = window.innerWidth >= 1560;
-          const isSmallScreen = window.innerWidth < 768;
-          const isMediumScreen = window.innerWidth < 1024;
-          
-          chart.options.plugins.datalabels.display = isLargeScreen; // Only show on large screens
+          chart.options.plugins.datalabels.display = screen.isLargeScreen || screen.isMediumScreen;
           chart.options.plugins.datalabels.font = {
             weight: 'bold',
-            size: isSmallScreen ? 8 : isMediumScreen ? 9 : 10
+            size: screen.isSmallScreen ? 8 : screen.isMediumScreen ? 9 : 10
           };
-          chart.options.plugins.datalabels.offset = isSmallScreen ? 2 : 5;
+          chart.options.plugins.datalabels.offset = screen.isSmallScreen ? 2 : 5;
         }
-        
         chart.update();
       }
       console.log('DeepDiveChart: 3/4 command in file');
@@ -165,59 +160,43 @@
 
     // Handle screen resize for responsive label rotation
     function handleResize() {
+      const screen = getScreenSizeFlags();
+      console.log("Handling resize, current screen size flags:", screen);
       if (chart && chart.options.scales?.x?.ticks) {
-        const isLargeScreen = window.innerWidth >= 1560;
-        const isSmallScreen = window.innerWidth < 768;
-        const isMediumScreen = window.innerWidth < 1024;
-        
-        // Update x-axis
-        chart.options.scales.x.ticks.maxRotation = isLargeScreen ? 45 : 90;
-        chart.options.scales.x.ticks.minRotation = isLargeScreen ? 0 : 90;
+        chart.options.scales.x.ticks.maxRotation = screen.isLargeScreen ? 45 : 90;
+        chart.options.scales.x.ticks.minRotation = screen.isLargeScreen ? 0 : 90;
         chart.options.scales.x.ticks.font = {
-          size: isSmallScreen ? 8 : isMediumScreen ? 10 : 12
+          size: screen.isSmallScreen ? 8 : screen.isMediumScreen ? 10 : 12
         };
-        
         // Update y-axis
         if (chart.options.scales?.y?.ticks) {
           chart.options.scales.y.ticks.font = {
-            size: isSmallScreen ? 8 : isMediumScreen ? 10 : 12
+            size: screen.isSmallScreen ? 8 : screen.isMediumScreen ? 10 : 12
           };
         }
-        
         // Update layout padding
         if (chart.options.layout?.padding) {
           chart.options.layout.padding = {
-            top: isSmallScreen ? 40 : 60,
-            bottom: isSmallScreen ? 5 : 10,
-            left: isSmallScreen ? 5 : 10,
-            right: isSmallScreen ? 5 : 10
+            top: screen.isSmallScreen ? 40 : 60,
+            bottom: screen.isSmallScreen ? 5 : 10,
+            left: screen.isSmallScreen ? 5 : 10,
+            right: screen.isSmallScreen ? 5 : 10
           };
         }
-        
         // Update datalabels
         if (chart.options.plugins?.datalabels) {
-          chart.options.plugins.datalabels.display = isLargeScreen; // Only show on large screens
+          chart.options.plugins.datalabels.display = screen.isLargeScreen || screen.isMediumScreen;
           chart.options.plugins.datalabels.font = {
             weight: 'bold',
-            size: isSmallScreen ? 8 : isMediumScreen ? 9 : 10
+            size: screen.isSmallScreen ? 8 : screen.isMediumScreen ? 9 : 10
           };
-          chart.options.plugins.datalabels.offset = isSmallScreen ? 2 : 5;
+          chart.options.plugins.datalabels.offset = screen.isSmallScreen ? 2 : 5;
         }
-        
         chart.update('none'); // Update without animation for smoother resize
       }
     }
   
     onMount(() => {
-      // sort feature names by featureOrder
-
-    // let sortedFeatureNames = explanationSummary.sort((a, b) => b.importance - a.importance).map((d) => d.feature_name);
-    // let sortedFeatures = modelFeatures.sort((a, b) => sortedFeatureNames.indexOf(a.feature_name) - sortedFeatureNames.indexOf(b.feature_name));
-    // let sortedIdx = modelFeatures.sort((a, b) => sortedFeatureNames.indexOf(a.feature_name) - sortedFeatureNames.indexOf(b.feature_name)).map((d) => d.feature_order);
-    //  const sortedFeatures = modelFeatures.sort((a, b) => a.feature_order - b.feature_order
-    //                                          );
-    //  
-      console.log("DeepDiveChart: onMount called");
       maxOfData = Math.max(...singleShapValues);
       minOfData = Math.min(...singleShapValues);
       
@@ -240,8 +219,8 @@
           pointBackgroundColor: pointBackgroundColor,
         }]
       };
-      console.log("IN DEEPDIVE data", data, featureNames);
   
+      const screen = getScreenSizeFlags();
       const config = {
         type: 'bar',
         plugins: [ChartDataLabels],
@@ -299,20 +278,19 @@
               }
             },
             datalabels: {
-              display: window.innerWidth >= 1980, // Only show on large screens
+              display: screen.isLargeScreen || screen.isMediumScreen, // Show on large and medium screens
               clamp: true,
               anchor: 'end',
               align: 'top',
               color: '#737373',
               font: {
                 weight: 'bold',
-                size: window.innerWidth < 768 ? 8 : window.innerWidth < 1024 ? 9 : 10
+                size: screen.isSmallScreen ? 8 : screen.isMediumScreen ? 9 : 10
               },
-              offset: window.innerWidth < 768 ? 2 : 5,
+              offset: screen.isSmallScreen ? 2 : 5,
               formatter: function(value: [number, number], context: Context) {
                 const index = context.dataIndex;
                 // const description = featureDescriptions[index]; // Description not needed for datalabel
-                console.log("IN DEEPDIVE featureEncodings", featureEncodings, featureEncodings[featureNames[index]]);
                 let featureValue;
                 
                 if (featureEncodings && featureEncodings[featureNames[index]]) {
@@ -371,9 +349,8 @@
                 const featureLines = breakTextIntoLines(featureValueStr, 10);
 
                 // Limit number of lines on small screens
-                const maxLines = window.innerWidth < 768 ? 2 : 3;
+                const maxLines = screen.isSmallScreen ? 2 : 3;
                 const displayLines = featureLines.slice(0, maxLines);
-                
                 return [shapLabel, ...displayLines];
               },
             },

@@ -41,7 +41,7 @@ export default {
     clearScreen: false,
     include: [
       'dev/**',
-      'src/ce_mlflow_extension/templates/**'
+      'src/xaiflow/templates/**'
     ]
   }
 };

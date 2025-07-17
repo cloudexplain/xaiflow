@@ -53,7 +53,7 @@ The development interface provides buttons to test each component:
 
 ## Debugging Workflow
 
-1. Edit any Svelte component in `src/ce_mlflow_extension/templates/components/`
+1. Edit any Svelte component in `src/xaiflow/templates/components/`
 2. Rollup automatically rebuilds the bundle
 3. Browser automatically refreshes with your changes
 4. Use browser dev tools to:

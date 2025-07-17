@@ -9,7 +9,7 @@ import os
 # Add the src directory to Python path so we can import our module
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-from ce_mlflow_extension.report_generator import ReportGenerator
+from xaiflow.report_generator import ReportGenerator
 
 
 def main():

@@ -1,5 +1,5 @@
 import unittest
-from ce_mlflow_extension.report_generator import ReportGenerator
+from xaiflow.report_generator import ReportGenerator
 
 class TestReportGenerator(unittest.TestCase):
 

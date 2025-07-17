@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from src.ce_mlflow_extension.report_generator import ReportGenerator
+from src.xaiflow.report_generator import ReportGenerator
 
 def test_importance_report():
     """Test generating an HTML report with feature importance chart."""

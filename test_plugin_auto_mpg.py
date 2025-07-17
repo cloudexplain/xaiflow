@@ -19,7 +19,7 @@ from sklearn.preprocessing import LabelEncoder
 
 
 try:
-    from xaiflow.mlflow_plugin import CEMLflowPlugin
+    from xaiflow import XaiflowPlugin
     print("✅ Successfully imported CEMLflowPlugin")
 except Exception as e:
     print(f"❌ Error importing plugin: {e}")
@@ -55,7 +55,8 @@ def test_plugin():
         rfc.fit(X, y)
         ex = shap.TreeExplainer(rfc)
         shap_values = ex(X)
-        plugin = CEMLflowPlugin()
+        import pdb; pdb.set_trace()
+        plugin = XaiflowPlugin()
         print("✅ Plugin initialized successfully")
 
         feature_encodings = {}

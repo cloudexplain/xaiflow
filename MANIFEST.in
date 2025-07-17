@@ -4,13 +4,13 @@ include requirements.txt
 include pyproject.toml
 
 # Include all template files and assets
-recursive-include src/ce_mlflow_extension/templates *.html
-recursive-include src/ce_mlflow_extension/templates/assets *.js *.js.map *.png *.css
-recursive-include src/ce_mlflow_extension/templates/components *.svelte
-recursive-include src/ce_mlflow_extension/templates/utils *.ts
+recursive-include src/xaiflow/templates *.html
+recursive-include src/xaiflow/templates/assets *.js *.js.map *.png *.css
+recursive-include src/xaiflow/templates/components *.svelte
+recursive-include src/xaiflow/templates/utils *.ts
 
 # Include type definitions
-recursive-include src/ce_mlflow_extension/types *.ts
+recursive-include src/xaiflow/types *.ts
 
 # Exclude development and test files
 exclude test_*.py

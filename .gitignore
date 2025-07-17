@@ -3,10 +3,10 @@ node_modules
 __pycache__
 
 # Generated Svelte bundles
-src/ce_mlflow_extension/templates/assets/bundle.js
-src/ce_mlflow_extension/templates/assets/bundle.js.map
+src/xaiflow/templates/assets/bundle.js
+src/xaiflow/templates/assets/bundle.js.map
 
 # Generated HTML reports
 *.html
-!src/ce_mlflow_extension/templates/report.html
+!src/xaiflow/templates/report.html
 mlruns

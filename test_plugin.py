@@ -12,7 +12,7 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
 try:
-    from ce_mlflow_extension.mlflow_plugin import CEMLflowPlugin
+    from xaiflow.mlflow_plugin import CEMLflowPlugin
     print("✅ Successfully imported CEMLflowPlugin")
 except Exception as e:
     print(f"❌ Error importing plugin: {e}")

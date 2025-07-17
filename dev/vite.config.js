@@ -9,7 +9,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@components': '../src/ce_mlflow_extension/templates/components'
+      '@components': '../src/xaiflow/templates/components'
     }
   }
 })
