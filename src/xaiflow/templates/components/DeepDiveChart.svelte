@@ -74,6 +74,7 @@
     let pointBackgroundColor;
     let cumulativeValues: number;
     let maxCumulativeValue: number;
+    let minCumulativeValue: number;
   
     function getScreenSizeFlags() {
       const width = window.innerWidth;
@@ -115,13 +116,14 @@
         console.log("DeepDiveChart: NEW 2 Updating chart with new data", cumulativeValues);
         chart.data.datasets[0].data = cumulativeValues;
         maxCumulativeValue = Math.max(...cumulativeValues.map(d => d[1]));
+        minCumulativeValue = Math.min(...cumulativeValues.map(d => d[0]));
         chart.data.datasets[0].backgroundColor = pointBackgroundColor;
         // Dynamically update y-axis min and max
         console.log("DeepDiveChart: Updating chart with new data", cumulativeValues, pointBackgroundColor);
         if (chart.options.scales?.y) {
-          console.log("DeepDiveChart: Updating y-axis min and max to ", Math.floor(minOfData), Math.ceil(maxOfData * 1.05));
-          chart.options.scales.y.min = Math.floor(minOfData);
-          chart.options.scales.y.max = Math.ceil(maxOfData * 1.05);
+          console.log("DeepDiveChart: Updating y-axis min and max to ", Math.floor(minOfData), Math.ceil(maxOfData * 1.05), maxCumulativeValue, minCumulativeValue);
+          chart.options.scales.y.min = Math.floor(minCumulativeValue * 0.95);
+          chart.options.scales.y.max = Math.ceil(maxCumulativeValue * 1.05);
         }
         // Update x-axis rotation based on screen size
         if (chart.options.scales?.x?.ticks) {

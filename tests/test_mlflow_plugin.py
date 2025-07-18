@@ -168,7 +168,7 @@ def test_categorical_feature_encodings2(mocker):
     experiment_name = "dummytest"
     mlflow.set_experiment(experiment_name=experiment_name)
 
-    output_path = f"tests/outputs/test_classification_case.html"
+    output_path = f"tests/outputs/test_categorical_feature_encodings.html"
     class DummyTmpFile:
         name = output_path
         def __enter__(self):
