@@ -1,6 +1,7 @@
 <script lang="ts">
   import ImportanceChart2 from './ImportanceChart2.svelte';
   import ScatterShapValues from './ScatterShapValues.svelte';
+  import DeepDiveManager from './DeepDiveManager.svelte';
   
   // Props using Svelte 5 runes
   interface Props {
@@ -8,18 +9,54 @@
     shapValues: number[][];
     featureValues: number[][];
     featureEncodings?: { [key: string]: any }[]; // For feature value mapping
+    baseValues: number[] | number; // Base values for SHAP calculations
+    featureNames?: string[]; // Optional prop for feature names
+    isHigherOutputBetter?: boolean; // Optional prop to determine if higher output is better
+    groupLabels: string[]; // Optional prop for group labels
   }
   
-  let { importanceData, shapValues, featureValues, featureEncodings = {} }: Props = $props();
+  let { importanceData,
+        shapValues,
+        featureValues,
+        featureEncodings = {},
+        baseValues,
+        featureNames,
+        isHigherOutputBetter,
+        groupLabels,
+       }: Props = $props();
   
   // Reactive state for selected label using $state
   let selectedLabel: string | null = $state(null);
+  let showDeepDive = $state(false);
+  let selectedGroup: string | null = $state(null);
+  // Compute unique group labels
+  let uniqueGroups: string[] = $derived(Array.from(new Set(groupLabels || [])));
+  console.log('ChartManager: Loaded with props:', {
+    importanceData,
+    shapValues,
+    featureValues,
+    featureEncodings,
+    baseValues,
+    featureNames,
+    isHigherOutputBetter,
+    groupLabels
+  });
+
+  // Compute selectedShapValues based on selectedGroup
+  let selectedShapValues = $derived((selectedGroup && selectedGroup !== "" && selectedGroup !== "All")
+    ? shapValues.filter((_, idx) => groupLabels[idx] === selectedGroup)
+    : shapValues);
+
+  let selectedFeatureValues = $derived((selectedGroup && selectedGroup !== "" && selectedGroup !== "All")
+    ? featureValues.filter((_, idx) => groupLabels[idx] === selectedGroup)
+    : featureValues);
+  console.log('ChartManager: selectedShapValues computed:', selectedShapValues);
 
   console.log("ChartManager", importanceData);
   console.log('ChartManager: 1/4 command in file');
-  let featureNames = $derived(
-    importanceData.map(item => item.feature_name)
-  );
+  // let featureNames = $derived(
+  //   importanceData.map(item => item.feature_name)
+  // );
   console.log('ChartManager: 2/4 command in file');
   
   console.log('ChartManager: called');
@@ -42,94 +79,60 @@
 </script>
 
 <div class="chart-manager">
-  <div class="charts-row">
-    <div class="chart-section">
-      <h3>Feature Importance Chart</h3>
-      <div class="chart-container">
-        <ImportanceChart2 
-          data={importanceData} 
-          bind:selectedLabel={selectedLabel}
-          on:labelSelected={handleLabelSelection}
-        />
-      </div>
+  <div style="display: flex; gap: 1.5rem; align-items: center; margin-bottom: 1.5rem; justify-content: space-between;">
+    <div style="display: flex; gap: 1.5rem; align-items: center;">
+      <button type="button" on:click={() => showDeepDive = false} class:selected={!showDeepDive}>Charts</button>
+      <button id="deepdive-button" type="button" on:click={() => showDeepDive = true} class:selected={showDeepDive}>Deep Dive</button>
     </div>
-    
-    <div class="chart-section">
-      <h3>SHAP Values</h3>
-      <div class="chart-container">
-        <ScatterShapValues 
-          shapValues={shapValues} 
-          featureValues={featureValues}
-          bind:selectedFeatureIndex={selectedFeatureIndex} 
-          selectedFeature={selectedLabel}
-          bind:selectedLabel={selectedLabel}
-          isHigherOutputBetter={true} 
-          featureEncodings={featureEncodings}
-        />
+    {#if uniqueGroups.length > 0}
+      <div style="margin-left: auto;">
+        <label for="group-dropdown" style="margin-right: 0.5em; font-size: 1em;">Group:</label>
+        <select id="group-dropdown" bind:value={selectedGroup} on:change={(e) => selectedGroup = e.target.value} style="font-size: 1em; padding: 0.3em 0.7em;">
+          <option value="">All</option>
+          {#each uniqueGroups as group}
+            <option value={group}>{group}</option>
+          {/each}
+        </select>
       </div>
-    </div>
+    {/if}
   </div>
+  {#if !showDeepDive}
+    <div class="charts-row">
+      <div class="chart-section">
+        <h3>Feature Importance Chart</h3>
+        <div class="chart-container">
+          <ImportanceChart2 
+            data={importanceData} 
+            bind:selectedLabel={selectedLabel}
+            on:labelSelected={handleLabelSelection}
+          />
+        </div>
+      </div>
+      
+      <div class="chart-section">
+        <h3>SHAP Values</h3>
+        <div class="chart-container">
+          <ScatterShapValues 
+            shapValues={selectedShapValues} 
+            featureValues={selectedFeatureValues}
+            bind:selectedFeatureIndex={selectedFeatureIndex} 
+            bind:selectedFeature={selectedLabel}
+            isHigherOutputBetter={true} 
+            featureEncodings={featureEncodings}
+          />
+        </div>
+      </div>
+    </div>
+  {:else}
+    <DeepDiveManager
+      shapValues={selectedShapValues}
+      featureValues={selectedFeatureValues}
+      selectedFeatureIndex={selectedFeatureIndex}
+      selectedFeature={selectedLabel}
+      baseValues={baseValues}
+      featureEncodings={featureEncodings}
+      isHigherOutputBetter={true}
+      featureNames={featureNames}
+    />
+  {/if}
 </div>
-
-<style>
-  .chart-manager {
-    width: 100%;
-  }
-  
-  .charts-row {
-    display: flex;
-    flex-direction: row;
-    gap: 20px;
-    margin-bottom: 30px;
-    width: 100%;
-    align-items: stretch;
-  }
-  
-  .chart-section {
-    flex: 1;
-    min-width: 0; /* Allows flex items to shrink below their natural width */
-    width: 50%;
-    max-width: 50%;
-  }
-  
-  .chart-section h3 {
-    margin-bottom: 15px;
-    color: #ff0000; /* Changed to red to test props propagation */
-    text-align: center;
-    font-weight: bold;
-  }
-  
-  .chart-container {
-    height: 500px;
-    width: 100%;
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    padding: 10px;
-    background-color: #fafafa;
-    box-sizing: border-box;
-  }
-  
-  .selected-info {
-    background-color: #f0f8ff;
-    padding: 15px;
-    border-radius: 5px;
-    border-left: 4px solid #007acc;
-    margin-top: 20px;
-  }
-  
-  .selected-info p {
-    margin: 0;
-    font-size: 16px;
-  }
-  
-  /* Responsive design for smaller screens */
-  @media (max-width: 768px) {
-    .charts-row {
-      flex-direction: column;
-    }
-    
-    .chart-container {
-      height: 400px;
-    }
-  }
-</style>

@@ -170,3 +170,18 @@ Built on top of [MLflow](https://mlflow.org/) for experiment tracking, [SHAP](ht
 ---
 
 Made by the [CloudExplain Team](https://cloudexplain.eu)
+
+## Development Notes
+
+- **All styling must go in `report.html`**: Do not use inline styles or Svelte `<style>` blocks for the main report UI. This is required because styles are not reliably handed over or injected from Svelte to the final HTML report. Always update or add CSS in `src/xaiflow/templates/report.html` for any UI/UX changes.
+- **Always rebuild the frontend bundle before running Python tests**: The Svelte/JS bundle (`bundle.js`) must be up-to-date for the Python tests to work correctly. Before running any Python tests (e.g., Playwright or integration tests), always run:
+
+  ```bash
+  make build && python -m pytest tests/test_mlflow_plugin.py
+  ```
+  or, for all tests:
+  ```bash
+  make build && python -m pytest
+  ```
+- **Frontend changes require a rebuild**: Any change to Svelte components or frontend logic requires a new build of `bundle.js` to be reflected in the generated reports and tests.
+- **UI/UX review**: When making UI changes, always check the result in the browser and ensure the layout matches the design intent. Use only relative units (rem, em, %) for all sizing and spacing in CSS.

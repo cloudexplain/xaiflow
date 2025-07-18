@@ -72,7 +72,9 @@ def html_content_click_test(html_path: str):
         }
         """)
         assert not is_empty, "Canvas is empty or nearly empty: 99% of pixels have the same color"
-
+        # click "deepdive-button"
+        page.wait_for_selector("#deepdive-button")
+        page.click("#deepdive-button")
         # --- NEW: Check canvas by id 'deepdive-canvas' and get unique colors ---
         page.wait_for_selector("#deepdive-canvas")
         deepdive_canvas = page.query_selector("#deepdive-canvas")
@@ -168,7 +170,7 @@ def test_categorical_feature_encodings2(mocker):
     experiment_name = "dummytest"
     mlflow.set_experiment(experiment_name=experiment_name)
 
-    output_path = f"tests/outputs/test_classification_case.html"
+    output_path = f"tests/outputs/test_categorical_feature_encodings.html"
     class DummyTmpFile:
         name = output_path
         def __enter__(self):
@@ -202,59 +204,6 @@ def test_no_feature_encodings():
         feature_values=[1.0, 2.0, 3.0],
         feature_encodings=None,
         feature_names=['Feature 1', 'Feature 2', 'Feature 3'],
-    )
-    return html_content
-
-@save_and_click_canvas_wrapper
-def test_fix_previous_bug():
-    importanceData = {'features':
-                      ['acv_score_canc_30d',
-                      'avg_canc_dealer_no_weighted',
-                      'ctr_usa_sec_inc_voice_a6m',
-                      'avg_canc_reseller_id_weighted',
-                      'ctr_usa_kb_data_usg_a3m',
-                      'ctr_sales_channel_current',
-                      'ctr_cancellations_per_year',
-                      'avg_vvl_reseller_id_weighted',
-                      'ctr_start_days',
-                      'ctr_min_duration_date_crm_days',
-                      'rlz',
-                      'vvl_l_event_days',
-                      'avg_vvl_sales_channel',
-                      'ctr_dealer_no_current',
-                      'avg_canc_sales_channel',
-                      'prt_cancellation_page_visit_90d_count',
-                      'acv_score_vvl_30d'],
-                      'values': [0.5000000000000614,
-                                 0.49999999999993844]}
-    shapValues = [[0.05231021109253422, -0.05231021109253736], [0.0073606489440402965, -0.007360648944034653], [-0.01633880222219225, 0.016338802222170094], [0.012322311243639975, -0.012322311243637033], [-0.004445322661143976, 0.004445322661143468], [0.0009611405151175154, -0.0009611405151178431], [0.005596997502669034, -0.0055969975026683915], [-0.0008618250588141368, 0.0008618250587932731], [0.0016991238750754237, -0.0016991238750824476], [0.0048252568432011304, -0.004825256843199152], [-0.00038499217151075256, 0.00038499217151299176], [0.005172501948575322, -0.005172501948575318], [-0.003383349580534422, 0.003383349580535079], [-0.017147577240666855, 0.017147577240670973], [0.008064862968425773, -0.008064862968423504], [0.0018500348673166761, -0.0018500348673163927], [0.006529750924148127, -0.006529750924151195]]
-    featureValues = [0.03421833738684654, 0.022704629679359795, 15.0, 0.022704629679359795, 30193.0, 241.0, 0.0, 0.022739316468840073, 951.5416666666666, 2912717.0, 30.0, 9999.0, 0.019356054262267625, 9.0, 0.02191634567074192, 0.0, 0.2959745228290558]
-    baseValues = [0.9058690282100686, 0.09413097178993132]
-    featureEncodings = None
-    featureNames = ['acv_score_canc_30d',
-                    'avg_canc_dealer_no_weighted',
-                    'ctr_usa_sec_inc_voice_a6m',
-                    'avg_canc_reseller_id_weighted',
-                    'ctr_usa_kb_data_usg_a3m',
-                    'ctr_sales_channel_current',
-                    'ctr_cancellations_per_year',
-                    'avg_vvl_reseller_id_weighted',
-                    'ctr_start_days',
-                    'ctr_min_duration_date_crm_days',
-                    'rlz',
-                    'vvl_l_event_days',
-                    'avg_vvl_sales_channel',
-                    'ctr_dealer_no_current',
-                    'avg_canc_sales_channel',
-                    'prt_cancellation_page_visit_90d_count',
-                    'acv_score_vvl_30d']
-    plugin = XaiflowPlugin()
-    html_content = plugin._generate_html_content(
-        importance_data=importanceData,
-        shap_values=shapValues,
-        feature_values=featureValues,
-        feature_encodings=featureEncodings,
-        feature_names=featureNames,
     )
     return html_content
 
@@ -318,6 +267,63 @@ def test_classification_case(mocker):
             shap_values=shap_values,
             feature_encodings=feature_encodings,
             feature_names=list(X.columns),
+        )
+        html_content_click_test(Path(output_path))
+    # return html_content
+
+
+def test_classification_case_check_list_feature(mocker):
+    X, y = shap.datasets.adult(n_points=200)
+
+    # Identify categorical columns
+    categorical_cols = [col for col in X.columns if X[col].dtype == 'category' or X[col].dtype == 'object']
+    numeric_cols = [col for col in X.columns if col not in categorical_cols]
+
+    label_encoders = {}
+
+    # Fill missing values manually
+    for col in numeric_cols:
+        X[col] = X[col].astype(float).fillna(X[col].mean())
+    for col in categorical_cols:
+        le = LabelEncoder()
+        X[col + '_encoded'] = le.fit_transform(X[col].astype(str))  # convert to string in case of NaNs
+        label_encoders[col] = le  # Save encoder if needed later
+
+    # Train model
+    rfc = RandomForestClassifier()
+    rfc.fit(X, y)
+    ex = shap.TreeExplainer(rfc)
+    shap_values = ex(X)
+    plugin = XaiflowPlugin()
+
+    feature_encodings = {}
+    for col in categorical_cols:
+        feature_encodings[col + '_encoded'] = dict(zip(range(len(label_encoders[col].classes_)), label_encoders[col].classes_))
+    experiment_name = "dummytest"
+    mlflow.set_experiment(experiment_name=experiment_name)
+
+    output_path = f"tests/outputs/test_classification_case_check_list_feature.html"
+    class DummyTmpFile:
+        name = output_path
+        def __enter__(self):
+            self.name = output_path
+            # import pdb; pdb.set_trace()  # Debugging breakpoint
+            return self
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            pass
+
+    mocker.patch("tempfile.NamedTemporaryFile", return_value=DummyTmpFile())
+    mocker.patch("os.unlink")  # Prevent deletion
+
+    # Optionally patch mlflow.log_artifact if you want to avoid real logging
+    mocker.patch("mlflow.log_artifact")
+
+    with mlflow.start_run(run_name="auto_mpg_test"):
+        plugin.log_feature_importance_report(
+            shap_values=shap_values,
+            feature_encodings=feature_encodings,
+            feature_names=list(X.columns),
+            group_labels=["Group 1", "Group 2", "Group 3", "Group 4"] * int(len(shap_values) / 4)  # Example group labels
         )
         html_content_click_test(Path(output_path))
     # return html_content
