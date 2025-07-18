@@ -413,7 +413,13 @@
     });
   </script>
   
-  <canvas id="deepdive-canvas" bind:this={chartCanvas}></canvas>
+  <div style="position: relative; width: 100%; height: 100%;">
+    <canvas id="deepdive-canvas" bind:this={chartCanvas}></canvas>
+    <div class="deepdive-prediction-box">
+      <div><strong>prediction:</strong> {Math.round((base_value + singleShapValues.reduce((a, b) => a + b, 0)) * 100) / 100}</div>
+      <div><strong>baseline:</strong> {Math.round(base_value * 100) / 100}</div>
+    </div>
+  </div>
   
   <style>
     canvas {

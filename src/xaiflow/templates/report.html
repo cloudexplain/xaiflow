@@ -8,50 +8,50 @@
         body {
             font-family: Arial, sans-serif;
             margin: 0;
-            padding: 20px;
+            padding: 2rem;
             background-color: #f5f5f5;
         }
         .container {
-            max-width: 1200px;
+            max-width: 75rem;
             margin: 0 auto;
         }
         .section {
             background-color: white;
-            padding: 30px;
-            margin-bottom: 20px;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 2rem;
+            margin-bottom: 1.25rem;
+            border-radius: 0.625rem;
+            box-shadow: 0 0.25rem 0.375rem rgba(0, 0, 0, 0.1);
         }
         h1 {
             color: #333;
-            margin-bottom: 20px;
+            margin-bottom: 1.25rem;
             text-align: center;
         }
         h2 {
             color: #555;
-            margin-bottom: 15px;
+            margin-bottom: 0.9375rem;
         }
         .traditional-display {
-            font-size: 24px;
+            font-size: 1.5rem;
             color: #666;
-            margin: 20px 0;
-            padding: 20px;
+            margin: 1.25rem 0;
+            padding: 1.25rem;
             background-color: #f8f9fa;
-            border-radius: 5px;
+            border-radius: 0.3125rem;
             text-align: center;
         }
         #importance-chart-container {
-            height: 500px;
-            margin-top: 20px;
+            height: 31.25rem;
+            margin-top: 1.25rem;
         }
         #importance-chart2-container {
-            height: 600px;
-            margin-top: 20px;
+            height: 37.5rem;
+            margin-top: 1.25rem;
             width: 100%;
             overflow: visible;
         }
         #simple-display-container {
-            margin-top: 20px;
+            margin-top: 1.25rem;
         }
         .scatter-shap-container {
             position: relative;
@@ -74,8 +74,8 @@
         .charts-row {
             display: flex;
             flex-direction: row;
-            gap: 20px;
-            margin-bottom: 30px;
+            gap: 1.25rem;
+            margin-bottom: 1.875rem;
             width: 100%;
             align-items: stretch;
         }
@@ -88,43 +88,178 @@
         }
         
         .chart-section h3 {
-            margin-bottom: 15px;
+            margin-bottom: 0.9375rem;
             text-align: center;
             font-weight: bold;
         }
         
         .chart-container {
-            height: 500px;
+            height: 31.25rem;
             width: 100%;
             border: 1px solid #e0e0e0;
-            border-radius: 8px;
-            padding: 10px;
+            border-radius: 0.5rem;
+            padding: 0.625rem;
             background-color: #fafafa;
             box-sizing: border-box;
         }
         
         .selected-info {
             background-color: #f0f8ff;
-            padding: 15px;
-            border-radius: 5px;
-            border-left: 4px solid #007acc;
-            margin-top: 20px;
+            padding: 0.9375rem;
+            border-radius: 0.3125rem;
+            border-left: 0.25rem solid #007acc;
+            margin-top: 1.25rem;
         }
         
         .selected-info p {
             margin: 0;
-            font-size: 16px;
+            font-size: 1rem;
+        }
+
+        .job-list li.selected {
+            background: #f5f5f5;
+            font-weight: bold;
         }
         
         /* Responsive design for smaller screens */
-        @media (max-width: 768px) {
+        @media (max-width: 48rem) {
             .charts-row {
             flex-direction: column;
             }
             
             .chart-container {
-            height: 400px;
+            height: 25rem;
             }
+        }
+        .deepdive-flex-row {
+            display: flex;
+            flex-direction: row;
+            gap: 2rem;
+            align-items: flex-start;
+            width: 100%;
+        }
+        .deepdive-observation-dropdown {
+            max-width: 9.5rem; /* was 16.25rem */
+            min-width: 6rem;    /* was 11.25rem */
+            background: #fff;
+            border-radius: 0.4rem;
+            box-shadow: 0 0.1rem 0.4rem rgba(0,0,0,0.04);
+            padding: 0.7rem 0.5rem 0.5rem 0.5rem; /* was 1.125rem 0.75rem 0.75rem 0.75rem */
+            border: 0.0625rem solid #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            font-size: 0.92rem;
+        }
+        .deepdive-observation-dropdown label {
+            font-weight: bold;
+            margin-bottom: 0.25rem;
+            font-size: 0.98rem;
+        }
+        .deepdive-observation-dropdown input[type="text"] {
+            width: 70%;
+            padding: 0.3em 0.6em;
+            border: 0.0625rem solid #ccc;
+            border-radius: 0.22rem;
+            font-size: 0.92rem;
+            margin-bottom: 0.4rem;
+            box-sizing: border-box;
+        }
+        .job-list {
+            padding: 0;
+            margin: 0;
+            list-style: none;
+            min-height: 7.5rem; /* was 11.25rem */
+        }
+        .job-list li {
+            padding: 0.35em;
+            font-size: 0.92rem;
+            cursor: pointer;
+            border-radius: 0.25em;
+            transition: background 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .job-list li.selected {
+            background: #f5f5f5;
+            font-weight: bold;
+        }
+        .job-list li:hover {
+            background: #f0f0f0;
+        }
+        .selected-dot {
+            float: right;
+            width: 1.25em; /* 20px -> 1.25em */
+            height: 1.25em;
+            background: #222;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .no-matches {
+            color: #888;
+            padding: 0.5em;
+        }
+        .deepdive-pagination {
+            margin-top: 0.5em;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5em;
+        }
+        .deepdive-pagination button {
+            padding: 0.25em 0.75em;
+            border-radius: 0.25em;
+            border: 0.0625rem solid #ccc;
+            background: #fafafa;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .deepdive-pagination button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .deepdive-chart-container {
+            flex: 1 1 0%;
+            min-width: 0;
+            background: #fff;
+            border-radius: 0.5rem;
+            box-shadow: 0 0.125rem 0.5rem rgba(0,0,0,0.04);
+            padding: 1.125rem;
+            border: 1px solid #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            justify-content: flex-start;
+        }
+        @media (max-width: 56.25rem) {
+            .deepdive-flex-row {
+                flex-direction: column;
+            }
+            .deepdive-observation-dropdown {
+                max-width: 100%;
+                margin-bottom: 1.125rem;
+            }
+        }
+
+        .deepdive-prediction-box {
+        position: absolute;
+        top: 0.0em;
+        right: 0.5em;
+        background: rgba(255,255,255,0.95);
+        border: 1px solid #e0e0e0;
+        border-radius: 0.5em;
+        box-shadow: 0 0.125em 0.5em rgba(0,0,0,0.04);
+        padding: 0.5em 1em;
+        font-size: 0.95em;
+        z-index: 2;
+        min-width: 8em;
+        text-align: left;
+        color: #333;
+        }
+        .deepdive-prediction-box strong {
+        font-weight: 600;
         }
     </style>
 </head>
