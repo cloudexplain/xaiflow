@@ -32,6 +32,7 @@ class XaiflowPlugin:
         shap_values: Explanation,
         feature_encodings: Optional[Dict[str, Dict[int, str]]] = None,
         importance_values: List[float] | np.ndarray = None,
+        group_labels: Optional[List[str]] = None,
         run_id: Optional[str] = None,
         artifact_path: str = "reports",
         report_name: str = "feature_importance_report.html",
@@ -44,6 +45,7 @@ class XaiflowPlugin:
             feature_names: List of feature names
             importance_values: List of importance values corresponding to features
             shap_values: Optional SHAP values matrix (samples x features)
+            group_labels: Optional list of group labels for each sample
             run_id: MLflow run ID (uses active run if None)
             artifact_path: Path within MLflow artifacts to store the report
             report_name: Name of the HTML report file
@@ -73,6 +75,10 @@ class XaiflowPlugin:
                 )
                 shap_values = shap_values[..., -1]
                 base_values = float(base_values[-1])
+
+        if group_labels is not None:
+            if len(group_labels) != shap_values.shape[0]:
+                raise ValueError("group_labels length must match the number of samples in shap_values.")
 
         # Use active run if no run_id provided
         if run_id is None:
@@ -105,6 +111,7 @@ class XaiflowPlugin:
             html_content = self._generate_html_content(
                 importance_data=importance_data,
                 shap_values=shap_values,
+                group_labels=group_labels or [],  # Default to empty list if None
                 feature_values=feature_values,
                 base_values=base_values,
                 feature_encodings=feature_encodings,
@@ -143,6 +150,7 @@ class XaiflowPlugin:
         importance_data: Dict[str, Any],
         shap_values: List[List[float]],
         feature_values: List[float] = None,
+        group_labels: List[str] = None,
         base_values: List[float] = None,
         feature_encodings: Optional[Dict[str, Dict[int, str]]] = None,
         feature_names: List[str] = None
@@ -202,6 +210,7 @@ class XaiflowPlugin:
             timestamp=current_time,
             importance_data=importance_data,  # Pass as Python dict
             shap_values=shap_values,  # Pass as Python list
+            group_labels=group_labels or [],  # Pass as Python list or empty list
             feature_values=feature_values,  # Pass as Python list or None
             base_values=base_values or [0] * 10,  # Todo: fix this once we hand over numpy arrays
             feature_encodings=feature_encodings or {},  # Pass as optional dict

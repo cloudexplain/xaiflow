@@ -289,6 +289,7 @@
             const baseValues = {{ base_values | safe }};
             const featureEncodings = {{ feature_encodings | safe }};
             const featureNames = {{ feature_names | safe }};
+            const groupLabels = {{ group_labels | safe }};
             
             // Initialize ChartManager with all props needed for both managers
             if (window.ChartManager && importanceData) {
@@ -306,7 +307,8 @@
                             featureValues: featureValues,
                             baseValues: baseValues,
                             featureEncodings: featureEncodings,
-                            featureNames: featureNames
+                            featureNames: featureNames,
+                            groupLabels: groupLabels,
                         }
                     });
                     console.log('ChartManager with DeepDiveManager mounted successfully!');

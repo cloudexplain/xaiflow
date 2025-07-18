@@ -32,7 +32,7 @@
     });
     let selectedObservationIndex = $state(0);
     let currentPage = $state(0);
-    let totalObservations = shapValues.length;
+    let totalObservations = $derived(shapValues.length);
     let filterText = $state("");
 
     let allObservations = $derived(
