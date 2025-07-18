@@ -17,8 +17,8 @@
 
     let { shapValues,
           featureValues,
-          selectedFeatureIndex,
-          selectedFeature,
+          selectedFeatureIndex = $bindable(),
+          selectedFeature = $bindable(),
           featureEncodings=[{}],
           isHigherOutputBetter=false }: Props = $props();
     let chart: Chart | undefined = $state();

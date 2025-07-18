@@ -72,7 +72,9 @@ def html_content_click_test(html_path: str):
         }
         """)
         assert not is_empty, "Canvas is empty or nearly empty: 99% of pixels have the same color"
-
+        # click "deepdive-button"
+        page.wait_for_selector("#deepdive-button")
+        page.click("#deepdive-button")
         # --- NEW: Check canvas by id 'deepdive-canvas' and get unique colors ---
         page.wait_for_selector("#deepdive-canvas")
         deepdive_canvas = page.query_selector("#deepdive-canvas")
