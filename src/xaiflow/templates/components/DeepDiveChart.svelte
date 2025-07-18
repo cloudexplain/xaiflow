@@ -10,6 +10,7 @@
   
     // Register the necessary components
     Chart.register(BarController, BarElement, CategoryScale, LinearScale, Title, Tooltip, Legend);
+    console.log("DeepDiveChart: NEWNEWNEW Initialized Chart.js components");
 
     interface Props {
       shapValues: number[][];
@@ -85,11 +86,11 @@
     }
   
     function updateChart(singleShapValues: number[]) {
-      console.log("updateChart called with singleShapValues:", singleShapValues, "and singleFeatureValues:", singleFeatureValues);
+      console.log("DeepDiveChart: updateChart called with singleShapValues:", singleShapValues, "and singleFeatureValues:", singleFeatureValues);
       maxOfData = Math.max(...singleShapValues);
       minOfData = Math.min(...singleShapValues);
       const screen = getScreenSizeFlags();
-      console.log("Screen size flags:", screen);
+      console.log("DeepDiveChart: Screen size flags:", screen);
       
       // Color mapping based on isHigherOutputBetter prop
       pointBackgroundColor = singleShapValues.map(d => {
@@ -99,20 +100,29 @@
         // If higher output is NOT better, use normal color mapping (red=high, green=low)
         const colorValue = isHigherOutputBetter ? (100 - normalizedValue) : normalizedValue;
         
+        console.log("Normalized Value:", normalizedValue, "Color Value:", colorValue);
         return colorMap(colorValue);
         // return colorValue;
       });
       
       console.log("Max of Data", maxOfData);
       console.log("Min of Data", minOfData);
-  
+
       if (chart) {
         chart.data.labels = featureNames;
+        console.log("DeepDiveChart: NEW Updating chart with new data", singleShapValues, featureNames, base_value);
         cumulativeValues = createCumulativeStartEndRangesFromValues(singleShapValues, base_value)
+        console.log("DeepDiveChart: NEW 2 Updating chart with new data", cumulativeValues);
         chart.data.datasets[0].data = cumulativeValues;
         maxCumulativeValue = Math.max(...cumulativeValues.map(d => d[1]));
-        console.log("Max Cumulative Value", maxCumulativeValue);
         chart.data.datasets[0].backgroundColor = pointBackgroundColor;
+        // Dynamically update y-axis min and max
+        console.log("DeepDiveChart: Updating chart with new data", cumulativeValues, pointBackgroundColor);
+        if (chart.options.scales?.y) {
+          console.log("DeepDiveChart: Updating y-axis min and max to ", Math.floor(minOfData), Math.ceil(maxOfData * 1.05));
+          chart.options.scales.y.min = Math.floor(minOfData);
+          chart.options.scales.y.max = Math.ceil(maxOfData * 1.05);
+        }
         // Update x-axis rotation based on screen size
         if (chart.options.scales?.x?.ticks) {
           chart.options.scales.x.ticks.maxRotation = screen.isLargeScreen ? 45 : 90;
@@ -247,8 +257,8 @@
               }
             },
             y: {
-              min: 0,
-              max: Math.floor(maxCumulativeValue * 1.3),
+              min: Math.floor(minOfData * 0.95),
+              max: Math.ceil(maxOfData * 1.05),
               ticks: {
                 font: {
                   size: window.innerWidth < 768 ? 8 : window.innerWidth < 1024 ? 10 : 12
@@ -401,7 +411,7 @@
     });
   </script>
   
-  <canvas bind:this={chartCanvas}></canvas>
+  <canvas id="deepdive-canvas" bind:this={chartCanvas}></canvas>
   
   <style>
     canvas {

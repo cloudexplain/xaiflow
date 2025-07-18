@@ -104,7 +104,7 @@
 </script>
 
 <div>
-<div class="observation-dropdown" style="position:relative;max-width:300px;">
+<div class="deepdive-observation-dropdown" style="position:relative;max-width:300px;">
     <label for="observation-filter">Filter Observations:</label>
     <input id="observation-filter" type="text" bind:value={filterText} placeholder="Type to filter..."
         on:focus={handleInputFocus} on:blur={handleInputBlur} autocomplete="off" />

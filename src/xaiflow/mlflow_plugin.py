@@ -5,6 +5,7 @@ Integrates the report generator with MLflow for storing HTML reports as artifact
 
 import os
 import json
+import warnings
 import tempfile
 import shutil
 import mlflow
@@ -33,7 +34,8 @@ class XaiflowPlugin:
         importance_values: List[float] | np.ndarray = None,
         run_id: Optional[str] = None,
         artifact_path: str = "reports",
-        report_name: str = "feature_importance_report.html"
+        report_name: str = "feature_importance_report.html",
+        round_decimals: int = 4
     ) -> str:
         """
         Log an interactive feature importance report as an MLflow artifact
@@ -45,6 +47,7 @@ class XaiflowPlugin:
             run_id: MLflow run ID (uses active run if None)
             artifact_path: Path within MLflow artifacts to store the report
             report_name: Name of the HTML report file
+            round_decimals: Number of decimals to round feature values and SHAP values
             
         Returns:
             str: Path to the logged artifact
@@ -52,9 +55,25 @@ class XaiflowPlugin:
         
         if not isinstance(shap_values, Explanation):
             raise ValueError("shap_values must be an instance of shap.Explanation. Pls call explainer(X) or similar to get a valid Explanation object.")
-        feature_values = shap_values.data
-        base_values = shap_values.base_values
-        shap_values = shap_values.values
+        if np.issubdtype(shap_values.data.dtype, np.floating):
+            feature_values = np.round(shap_values.data, round_decimals)
+        else:
+            feature_values = shap_values.data
+        base_values = np.round(shap_values.base_values, round_decimals)[0]
+        shap_values = np.round(shap_values.values, round_decimals)
+        if feature_values.ndim != shap_values.ndim:
+            if shap_values.ndim - feature_values.ndim > 1:
+                NotImplementedError("It looks like you're using multi-target regression or multi-output classification. Currently we don't support this."
+                              " You can still use the plugin, just hand over shap_values[..., <target_index>] to get the SHAP values for a specific target/class."
+                              " Please ensure that the shap_values.dim - feature_values.dim is 1 or less.")
+            else:
+                warnings.warn("Feature values and SHAP values dimensions do not match. This can be due to multi-target regression or (multi-target) classification."
+                              " If you want a specific target/class, please hand over shap_values[..., <target_index>] to get the SHAP values for that target/class."
+                              " We fall back to shap_values[..., -1] in this case."
+                )
+                shap_values = shap_values[..., -1]
+                base_values = float(base_values[-1])
+
         # Use active run if no run_id provided
         if run_id is None:
             active_run = mlflow.active_run()
@@ -95,8 +114,8 @@ class XaiflowPlugin:
             with open(temp_path, 'w', encoding='utf-8') as f:
                 f.write(html_content)
 
-            with open('test_report.html', 'w', encoding='utf-8') as f:
-                f.write(html_content)
+            # with open('test_report.html', 'w', encoding='utf-8') as f:
+            #     f.write(html_content)
             
             # Log the report as an MLflow artifact
             artifact_full_path = f"{artifact_path}/{report_name}"
@@ -118,104 +137,6 @@ class XaiflowPlugin:
             # Clean up temporary file
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
-    
-    def log_model_explanation_report(
-        self,
-        model,
-        X_test: np.ndarray,
-        y_test: np.ndarray,
-        feature_names: List[str],
-        model_name: str = "model",
-        run_id: Optional[str] = None,
-        artifact_path: str = "reports",
-        report_name: str = "model_explanation_report.html"
-    ) -> str:
-        """
-        Log a comprehensive model explanation report with SHAP analysis
-        
-        Args:
-            model: Trained model object
-            X_test: Test data features
-            y_test: Test data targets
-            feature_names: List of feature names
-            model_name: Name of the model
-            run_id: MLflow run ID (uses active run if None)
-            artifact_path: Path within MLflow artifacts to store the report
-            report_name: Name of the HTML report file
-            
-        Returns:
-            str: Path to the logged artifact
-        """
-        
-        try:
-            import shap
-        except ImportError:
-            raise ImportError("SHAP is required for model explanation reports. Install with: pip install shap")
-        
-        # Use active run if no run_id provided
-        if run_id is None:
-            active_run = mlflow.active_run()
-            if active_run is None:
-                raise ValueError("No active MLflow run found. Please start a run or provide run_id.")
-            run_id = active_run.info.run_id
-        
-        # Calculate feature importance (if model supports it)
-        try:
-            if hasattr(model, 'feature_importances_'):
-                importance_values = model.feature_importances_.tolist()
-            elif hasattr(model, 'coef_'):
-                importance_values = np.abs(model.coef_).flatten().tolist()
-            else:
-                # Use permutation importance as fallback
-                from sklearn.inspection import permutation_importance
-                perm_importance = permutation_importance(model, X_test, y_test, random_state=42)
-                importance_values = perm_importance.importances_mean.tolist()
-        except Exception as e:
-            print(f"Warning: Could not calculate feature importance: {e}")
-            importance_values = [1.0 / len(feature_names)] * len(feature_names)
-        
-        # Calculate SHAP values
-        try:
-            # Use TreeExplainer for tree-based models, LinearExplainer for linear models
-            if hasattr(model, 'tree_'):
-                explainer = shap.TreeExplainer(model)
-            else:
-                explainer = shap.LinearExplainer(model, X_test)
-            
-            # Calculate SHAP values for a subset of test data (for performance)
-            sample_size = min(100, len(X_test))
-            sample_indices = np.random.choice(len(X_test), sample_size, replace=False)
-            X_sample = X_test[sample_indices]
-            
-            shap_values_matrix = explainer.shap_values(X_sample)
-            
-            # Handle multi-class case (take first class for now)
-            if isinstance(shap_values_matrix, list):
-                shap_values_matrix = shap_values_matrix[0]
-            
-            shap_values = shap_values_matrix.tolist()
-            
-        except Exception as e:
-            print(f"Warning: Could not calculate SHAP values: {e}")
-            # Generate dummy SHAP values
-            sample_size = min(100, len(X_test))
-            shap_values = []
-            for _ in range(sample_size):
-                sample_shap = [
-                    np.random.normal(0, abs(imp_val) * 0.1) 
-                    for imp_val in importance_values
-                ]
-                shap_values.append(sample_shap)
-        
-        # Log the report
-        return self.log_feature_importance_report(
-            feature_names=feature_names,
-            importance_values=importance_values,
-            shap_values=shap_values,
-            run_id=run_id,
-            artifact_path=artifact_path,
-            report_name=report_name
-        )
     
     def _generate_html_content(
         self,
@@ -289,72 +210,3 @@ class XaiflowPlugin:
         )
         
         return html_content
-        # Write to file
-    
-    def get_report_url(self, run_id: str, artifact_path: str = "reports", report_name: str = "feature_importance_report.html") -> str:
-        """
-        Get the MLflow UI URL for viewing the report
-        
-        Args:
-            run_id: MLflow run ID
-            artifact_path: Path within MLflow artifacts where the report is stored
-            report_name: Name of the HTML report file
-            
-        Returns:
-            str: URL to view the report in MLflow UI
-        """
-        
-        # Get the MLflow tracking URI
-        tracking_uri = mlflow.get_tracking_uri()
-        
-        # Construct the artifact URL
-        artifact_full_path = f"{artifact_path}/{report_name}"
-        
-        if tracking_uri.startswith("http"):
-            # Remote MLflow server
-            base_url = tracking_uri.rstrip('/')
-            url = f"{base_url}/#/experiments/runs/{run_id}/artifacts/{artifact_full_path}"
-        else:
-            # Local MLflow server (assume default port 5000)
-            url = f"http://localhost:5000/#/experiments/runs/{run_id}/artifacts/{artifact_full_path}"
-        
-        return url
-
-
-# Convenience functions for easy usage
-def log_feature_importance(
-    feature_names: List[str],
-    importance_values: List[float],
-    shap_values: Optional[List[List[float]]] = None,
-    **kwargs
-) -> str:
-    """
-    Convenience function to log feature importance report to MLflow
-    """
-    plugin = XaiflowPlugin()
-    return plugin.log_feature_importance_report(
-        feature_names=feature_names,
-        importance_values=importance_values,
-        shap_values=shap_values,
-        **kwargs
-    )
-
-
-def log_model_explanation(
-    model,
-    X_test: np.ndarray,
-    y_test: np.ndarray,
-    feature_names: List[str],
-    **kwargs
-) -> str:
-    """
-    Convenience function to log model explanation report to MLflow
-    """
-    plugin = XaiflowPlugin()
-    return plugin.log_model_explanation_report(
-        model=model,
-        X_test=X_test,
-        y_test=y_test,
-        feature_names=feature_names,
-        **kwargs
-    )
