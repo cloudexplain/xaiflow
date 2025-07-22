@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xaiflow"
-version = "0.1.0rc8"
+version = "0.1.0rc3"
 description = "MLflow integration library for generating interactive HTML reports with SHAP analysis using Svelte and Chart.js"
 authors = [
     {name = "CloudExplain Team", email = "tobias@cloudexplain.eu"}
@@ -46,9 +46,9 @@ dev = [
 ]
 
 [project.urls]
-Documentation = "https://github.com/cloudexplain/ce-mlflow-extension"
-Source = "https://github.com/cloudexplain/ce-mlflow-extension"
-Tracker = "https://github.com/cloudexplain/ce-mlflow-extension/issues"
+Documentation = "https://github.com/cloudexplain/xaiflow"
+Source = "https://github.com/cloudexplain/xaiflow"
+Tracker = "https://github.com/cloudexplain/xaiflow/issues"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
