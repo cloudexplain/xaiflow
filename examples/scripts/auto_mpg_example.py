@@ -47,6 +47,7 @@ with mlflow.start_run(run_name="auto_mpg_test"):
         feature_names=list(X.columns),
         shap_values=shap_values,
         feature_encodings=feature_encodings,
+        # assign each sample to a custom group label
         group_labels=["Custom Group " + str(i % 4) for i in range(len(X))],
     )
     run_id = mlflow.active_run().info.run_id
