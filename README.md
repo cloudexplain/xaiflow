@@ -7,7 +7,7 @@
 xaiflow integrates seamlessly with MLflow to generate interactive HTML reports for SHAP analysis. Instead of static charts and images, you get rich, interactive visualizations that stakeholders can explore and understand.
 
 Here should the video go:
-[![xaiflow showcase]("https://github.com/user-attachments/assets/f508fa6f-ab0f-493d-a892-ed958331e30a")]
+[![xaiflow showcase](video/video_thumbnail.png)]("https://github.com/user-attachments/assets/f508fa6f-ab0f-493d-a892-ed958331e30a")
 *Click the image above to watch the feature showcase video.*
 
 ## What We're Trying to Achieve
