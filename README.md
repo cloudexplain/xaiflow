@@ -6,6 +6,10 @@
 
 xaiflow integrates seamlessly with MLflow to generate interactive HTML reports for SHAP analysis. Instead of static charts and images, you get rich, interactive visualizations that stakeholders can explore and understand.
 
+Here should the video go:
+[![xaiflow showcase](video/video_thumbnail.png)](https://github.com/user-attachments/assets/f508fa6f-ab0f-493d-a892-ed958331e30a)
+*Click the image above to watch the feature showcase video.*
+
 ## What We're Trying to Achieve
 
 Most ML workflows produce explanations as static images or basic charts, which creates several problems:
@@ -38,10 +42,9 @@ with mlflow.start_run():
     
     # Add interactive explainable AI reports
     plugin = XaiflowPlugin()
-    plugin.log_feature_importance_report(
+    plugin.log_xai_report(
         feature_names=X.columns.tolist(),
         shap_values=shap_values,
-        report_name="model_explanation.html"
     )
 ```
 
@@ -81,7 +84,7 @@ xaiflow/
 ### Core Components
 
 **MLflow Integration** (`mlflow_plugin.py`)
-The `CEMLflowPlugin` class handles the integration with MLflow. The main method `log_feature_importance_report()` processes SHAP values, manages feature encodings, and stores the generated reports as MLflow artifacts.
+The `CEMLflowPlugin` class handles the integration with MLflow. The main method `log_xai_report()` processes SHAP values, manages feature encodings, and stores the generated reports as MLflow artifacts.
 
 **Report Generation** (`report_generator.py`)
 The `ReportGenerator` class converts SHAP data into interactive HTML reports using Jinja2 templating. It handles template loading, asset bundling, and data injection into the frontend components.
@@ -127,11 +130,10 @@ feature_encodings = {
     'region': {0: 'North', 1: 'South', 2: 'East', 3: 'West'}
 }
 
-plugin.log_feature_importance_report(
+plugin.log_xai_report(
     feature_names=feature_names,
     shap_values=shap_values,
     feature_encodings=feature_encodings,
-    report_name="enhanced_report.html"
 )
 ```
 
