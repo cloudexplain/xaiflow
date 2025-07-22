@@ -6,6 +6,7 @@
 
 xaiflow integrates seamlessly with MLflow to generate interactive HTML reports for SHAP analysis. Instead of static charts and images, you get rich, interactive visualizations that stakeholders can explore and understand.
 
+Here should the video go:
 <video src="video/feature_showcase.mp4" controls width="600">
   Your browser does not support the video tag.
 </video>
