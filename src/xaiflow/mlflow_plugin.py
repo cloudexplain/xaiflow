@@ -26,7 +26,7 @@ class XaiflowPlugin:
         self.template_dir = os.path.join(os.path.dirname(__file__), 'templates')
         self.env = Environment(loader=FileSystemLoader(self.template_dir))
 
-    def log_feature_importance_report(
+    def log_xai_report(
         self,
         feature_names: List[str],
         shap_values: Explanation,

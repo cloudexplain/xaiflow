@@ -43,11 +43,11 @@ with mlflow.start_run(run_name="auto_mpg_test"):
     feature_encodings = {'cylinders_encoded': {0: '3', 1: '4', 2: '5', 3: '6', 4: '8'},
                             'model_encoded': {0: 'Super 70', 1: 'Super 71', 2: 'Low 72', 3: 'Nice 73', 4: 'Great 74', 5: 'Lame 75', 6: 'High 76', 7: '77', 8: '78', 9: '79', 10: '80', 11: '81', 12: '82'},
                             'origin_encoded': {0: 'Afghanistan', 1: 'Bangladesh', 2: 'Maui'}}
-    artifact_path = plugin.log_feature_importance_report(
+    artifact_path = plugin.log_xai_report(
         feature_names=list(X.columns),
         shap_values=shap_values,
-        report_name="test_report_auto_mpg.html",
-        feature_encodings=feature_encodings
+        feature_encodings=feature_encodings,
+        group_labels=["Custom Group " + str(i % 4) for i in range(len(X))],
     )
     run_id = mlflow.active_run().info.run_id
     print(f"Run ID: {run_id}. If you are running mlflow locally use:\npython -m mlflow ui --port 5000\nThen open http://localhost:5000/#/experiments/{mlflow.get_experiment_by_name(experiment_name).experiment_id}/runs/{run_id} to view the report.",

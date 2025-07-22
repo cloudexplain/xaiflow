@@ -4,8 +4,6 @@ from xaiflow.mlflow_plugin import XaiflowPlugin
 import numpy as np
 from sklearn.datasets import fetch_openml
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
-from xgboost import XGBClassifier
-from catboost import CatBoostClassifier
 from sklearn.preprocessing import LabelEncoder
 import shap
 from typing import Callable
@@ -187,7 +185,7 @@ def test_categorical_feature_encodings2(mocker):
     mocker.patch("mlflow.log_artifact")
 
     with mlflow.start_run(run_name="auto_mpg_test"):
-        plugin.log_feature_importance_report(
+        plugin.log_xai_report(
             shap_values=shap_values,
             feature_encodings=feature_encodings,
             feature_names=list(X.columns),
@@ -263,7 +261,7 @@ def test_classification_case(mocker):
     mocker.patch("mlflow.log_artifact")
 
     with mlflow.start_run(run_name="auto_mpg_test"):
-        plugin.log_feature_importance_report(
+        plugin.log_xai_report(
             shap_values=shap_values,
             feature_encodings=feature_encodings,
             feature_names=list(X.columns),
@@ -319,11 +317,10 @@ def test_classification_case_check_list_feature(mocker):
     mocker.patch("mlflow.log_artifact")
 
     with mlflow.start_run(run_name="auto_mpg_test"):
-        plugin.log_feature_importance_report(
+        plugin.log_xai_report(
             shap_values=shap_values,
             feature_encodings=feature_encodings,
             feature_names=list(X.columns),
             group_labels=["Group 1", "Group 2", "Group 3", "Group 4"] * int(len(shap_values) / 4)  # Example group labels
         )
         html_content_click_test(Path(output_path))
-    # return html_content
